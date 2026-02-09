@@ -10,9 +10,6 @@ const errorHandler = require('./middleware/error');
 // Load env vars (local/dev)
 dotenv.config({ path: './.env' });
 
-// Connect to database
-connectDB();
-
 // Route files
 const auth = require('./routes/auth');
 const users = require('./routes/users');
@@ -31,6 +28,7 @@ const announcements = require('./routes/announcements');
 const dashboard = require('./routes/dashboard');
 const analytics = require('./routes/analytics');
 const blog = require('./routes/blog');
+const youtube = require('./routes/youtube');
 
 const app = express();
 
@@ -44,9 +42,14 @@ app.use(
 
 // Enable CORS
 const defaultOrigins = [
+  'https://tesbinn.com',   
+  'https://www.tesbinn.com',
+  'http://tesbinn.com',       
   'https://tesbinn-lms-frontend.vercel.app',
-  'http://localhost:8081',
+  'http://localhost:8081',                
   'http://172.16.0.2:8081',
+  'http://44.209.130.119',
+  'http://13.222.168.70/api/v1/payments/telebirr/create-order'
 ];
 const envOrigins = [process.env.ALLOWED_ORIGINS, process.env.FRONTEND_URL].filter(Boolean);
 const allowedOriginsString = [defaultOrigins.join(','), ...envOrigins].join(',');
@@ -80,6 +83,31 @@ app.use(
     credentials: true,
   })
 );
+
+// Serverless-safe DB connection:
+// On Vercel, if you connect at module load and it fails, the function crashes
+// before CORS headers get set. This middleware ensures CORS runs first and DB
+// connection errors become a normal JSON 500 response.
+app.use(async (req, res, next) => {
+  // Allow basic health checks without DB.
+  if (req.path === '/api/v1/health' || req.path === '/health') {
+    next();
+    return;
+  }
+
+  // Only connect for API routes.
+  if (!req.path.startsWith('/api/')) {
+    next();
+    return;
+  }
+
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Dev logging middleware
 if (process.env.NODE_ENV === 'development') {
@@ -119,6 +147,7 @@ app.use('/api/v1/announcements', announcements);
 app.use('/api/v1/dashboard', dashboard);
 app.use('/api/v1/analytics', analytics);
 app.use('/api/v1/blog', blog);
+app.use('/api/v1/youtube', youtube);
 
 app.use(errorHandler);
 

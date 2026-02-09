@@ -1,5 +1,10 @@
 const fs = require("fs");
 
+// NOTE:
+// Do not throw at module-load time. This module is imported by payment services,
+// and those services are imported during app startup because routes are mounted.
+// In serverless (Vercel), throwing here crashes the whole function even if you
+// never call Telebirr endpoints. Validate env at the moment you actually use it.
 const requiredEnv = [
   "TELEBIRR_BASE_URL",
   "TELEBIRR_WEB_BASE_URL",
@@ -9,11 +14,7 @@ const requiredEnv = [
   "TELEBIRR_MERCHANT_CODE",
   "TELEBIRR_PRIVATE_KEY",
 ];
-
-const missing = requiredEnv.filter((key) => !process.env[key]);
-if (missing.length) {
-  throw new Error(`Missing Telebirr env vars: ${missing.join(", ")}`);
-}
+const missingEnv = requiredEnv.filter((key) => !process.env[key]);
 
 const normalizeKey = (value) => (value ? value.replace(/\\n/g, "\n") : value);
 const loadCaCert = () => {
@@ -31,6 +32,7 @@ const loadCaCert = () => {
 const caCert = loadCaCert();
 
 module.exports = {
+  missingEnv,
   baseUrl: process.env.TELEBIRR_BASE_URL,
   webBaseUrl: process.env.TELEBIRR_WEB_BASE_URL,
   otherParams: process.env.TELEBIRR_OTHER_PARAMS || "&version=1.0&trade_type=Checkout",

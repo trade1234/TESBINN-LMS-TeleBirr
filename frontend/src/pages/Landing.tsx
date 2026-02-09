@@ -45,11 +45,14 @@ const quickLinks = [
   { icon: Headphones, label: "Help & Support" },
 ];
 
-const freeVideos = [
-  { title: "Starting an Import Business", thumbnail: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=250&fit=crop" },
-  { title: "Coffee Industry Basics", thumbnail: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&h=250&fit=crop" },
-  { title: "Digital Marketing Tips", thumbnail: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=250&fit=crop" },
-];
+type ChannelVideo = {
+  id: string;
+  title: string;
+  description: string;
+  publishedAt: string;
+  url: string;
+  thumbnail: string;
+};
 
 const testimonials = [
   {
@@ -91,6 +94,9 @@ const Landing = () => {
   const [advertsLoading, setAdvertsLoading] = useState(false);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [videos, setVideos] = useState<ChannelVideo[]>([]);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [videosError, setVideosError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -127,6 +133,32 @@ const Landing = () => {
         setSchedules([]);
       } finally {
         if (active) setSchedulesLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setVideosLoading(true);
+      setVideosError("");
+      try {
+        const res = await api.get<ApiResponse<ChannelVideo[]>>(
+          "/youtube/videos?handle=tradextv7&limit=3"
+        );
+        if (!active) return;
+        setVideos(res.data.data || []);
+      } catch (error) {
+        if (!active) return;
+        setVideos([]);
+        setVideosError("Unable to load videos right now.");
+      } finally {
+        if (active) setVideosLoading(false);
       }
     };
 
@@ -300,29 +332,51 @@ const Landing = () => {
             Free Learning from TESBINN
           </h2>
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {freeVideos.map((video, index) => (
-              <div key={index} className="group cursor-pointer">
-                <div className="relative rounded-lg overflow-hidden mb-3">
-                  <img
-                    src={video.thumbnail}
-                    alt={video.title}
-                    className="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/40 transition-colors">
-                    <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center">
-                      <Play className="h-5 w-5 text-accent-foreground fill-current" />
+            {videosLoading ? (
+              <p className="text-center text-primary-foreground/80 col-span-full">
+                Loading videos...
+              </p>
+            ) : videosError ? (
+              <p className="text-center text-primary-foreground/80 col-span-full">
+                {videosError}
+              </p>
+            ) : videos.length ? (
+              videos.map((video) => (
+                <div key={video.id} className="group cursor-pointer">
+                  <div className="relative rounded-lg overflow-hidden mb-3">
+                    <img
+                      src={video.thumbnail}
+                      alt={video.title}
+                      className="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/40 transition-colors">
+                      <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center">
+                        <Play className="h-5 w-5 text-accent-foreground fill-current" />
+                      </div>
                     </div>
                   </div>
+                  <p className="text-primary-foreground text-center font-medium">
+                    {video.title}
+                  </p>
                 </div>
-                <p className="text-primary-foreground text-center font-medium">{video.title}</p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-center text-primary-foreground/80 col-span-full">
+                No videos found yet.
+              </p>
+            )}
           </div>
           <div className="flex justify-center mt-8">
-            <Button variant="outline" className="border-accent bg-secondary text-accent-foreground hover:bg-accent">
-              <Youtube className="mr-2 h-4 w-4" />
-              Watch More on YouTube
-              <ChevronDown className="ml-2 h-4 w-4" />
+            <Button
+              variant="outline"
+              className="border-accent bg-secondary text-accent-foreground hover:bg-accent"
+              asChild
+            >
+              <Link to="/videos">
+                <Youtube className="mr-2 h-4 w-4" />
+                Watch More on YouTube
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
           </div>
         </div>

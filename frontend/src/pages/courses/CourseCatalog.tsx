@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Filter, SlidersHorizontal } from "lucide-react";
+import {
+  Search,
+  Filter,
+  SlidersHorizontal,
+  Code,
+  Palette,
+  TrendingUp,
+  Users,
+  Brain,
+  Briefcase,
+  Layers,
+  Zap,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Header from "@/components/layout/Header";
@@ -23,9 +35,7 @@ const CourseCatalog = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await api.get<ApiResponse<Course[]>>("/courses", {
-          params: selectedCategory !== "all" ? { category: selectedCategory } : undefined,
-        });
+        const res = await api.get<ApiResponse<Course[]>>("/courses");
         if (!active) return;
         setCourses(res.data.data);
       } catch (err: any) {
@@ -44,18 +54,38 @@ const CourseCatalog = () => {
     return () => {
       active = false;
     };
-  }, [selectedCategory]);
+  }, []);
 
   const filteredCourses = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return courses;
     return courses.filter((course) => {
-      return (
-        course.title.toLowerCase().includes(q) ||
-        course.description.toLowerCase().includes(q)
-      );
+      const matchesCategory =
+        selectedCategory === "all" || course.category === selectedCategory;
+      const matchesQuery = !q
+        ? true
+        : course.title.toLowerCase().includes(q) ||
+          course.description.toLowerCase().includes(q);
+      return matchesCategory && matchesQuery;
     });
-  }, [courses, searchQuery]);
+  }, [courses, searchQuery, selectedCategory]);
+
+  const categoryOptions = useMemo(() => {
+    const counts = courses.reduce<Record<string, number>>((acc, course) => {
+      acc[course.category] = (acc[course.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    return [
+      { id: "all", name: "All Courses", icon: Layers, count: courses.length },
+      { id: "development", name: "Development", icon: Code, count: counts.development || 0 },
+      { id: "design", name: "Design", icon: Palette, count: counts.design || 0 },
+      { id: "marketing", name: "Marketing", icon: TrendingUp, count: counts.marketing || 0 },
+      { id: "leadership", name: "Leadership", icon: Users, count: counts.leadership || 0 },
+      { id: "ai", name: "AI & ML", icon: Brain, count: counts.ai || 0 },
+      { id: "business", name: "Business", icon: Briefcase, count: counts.business || 0 },
+      { id: "productivity", name: "Productivity", icon: Zap, count: counts.productivity || 0 },
+    ];
+  }, [courses]);
 
   const courseCards = useMemo(() => {
     const labelByCategory: Record<string, string> = {
@@ -136,7 +166,10 @@ const CourseCatalog = () => {
           <div className="container-wide section-padding">
             {/* Category Filter */}
             <div className="mb-8">
-              <CategoryFilter onCategoryChange={setSelectedCategory} />
+              <CategoryFilter
+                onCategoryChange={setSelectedCategory}
+                categories={categoryOptions}
+              />
             </div>
 
             {/* Results Header */}

@@ -8,6 +8,7 @@ import ScrollToTop from "./components/layout/ScrollToTop";
 // Pages
 import Landing from "./pages/Landing";
 import SchedulePage from "./pages/Schedule";
+import VideosPage from "./pages/Videos";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -47,6 +48,8 @@ import AdminSchedules from "./pages/admin/Schedules";
 import AdminBlog from "./pages/admin/Blog";
 import AdminEnrolledStudents from "./pages/admin/EnrolledStudents";
 import NotFound from "./pages/NotFound";
+import Terms from "./pages/legal/Terms";
+import Privacy from "./pages/legal/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +69,7 @@ const App = () => (
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/courses" element={<CourseCatalog />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/videos" element={<VideosPage />} />
           <Route path="/course/:id" element={<CourseDetails />} />
           <Route path="/checkout/:courseId" element={<Checkout />} />
           <Route path="/payment/return" element={<PaymentReturn />} />
@@ -77,6 +81,8 @@ const App = () => (
           <Route path="/blog" element={<Blog />} />
           <Route path="/blog/:slug" element={<BlogPostPage />} />
           <Route path="/press" element={<Press />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
 
           {/* Student Routes */}
           <Route path="/student" element={<StudentDashboard />} />

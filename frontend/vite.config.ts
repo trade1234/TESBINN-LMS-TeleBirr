@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
     return (
       resolveOrigin(proxyOverride) ||
       resolveOrigin(backendUrl) ||
-      "https://tesbinn-lms-backend.vercel.app"
+      "https://13.222.168.70"
     );
   };
 

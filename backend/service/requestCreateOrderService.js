@@ -16,7 +16,7 @@ const postJson = (url, headers, body) =>
     const options = {
       method: "POST",
       hostname: parsed.hostname,
-      port: parsed.port || 5000,
+      port: parsed.port || 443,
       path: parsed.pathname + parsed.search,
       headers: {
         "Content-Type": "application/json",
