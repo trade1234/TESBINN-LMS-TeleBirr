@@ -82,6 +82,7 @@ app.use(
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
+    exposedHeaders: ['Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
   })
 );
 

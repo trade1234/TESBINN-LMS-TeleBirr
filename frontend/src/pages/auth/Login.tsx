@@ -18,6 +18,7 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [warningMessage, setWarningMessage] = useState("");
+  const [, setFailedAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
@@ -67,6 +68,7 @@ const Login = () => {
       });
 
       setWarningMessage("");
+      setFailedAttempts(0);
       setLockedUntil(null);
       authStorage.setToken(res.data.token);
       authStorage.setRole(res.data.role);
@@ -87,9 +89,12 @@ const Login = () => {
       const status = err?.response?.status;
       const headers = err?.response?.headers || {};
       const remainingHeader = headers["x-ratelimit-remaining"];
+      const limitHeader = headers["x-ratelimit-limit"];
       const retryAfterHeader = headers["retry-after"];
       const remaining = Number.parseInt(String(remainingHeader ?? ""), 10);
+      const limit = Number.parseInt(String(limitHeader ?? ""), 10);
       const retryAfter = Number.parseInt(String(retryAfterHeader ?? ""), 10);
+      const maxAttempts = Number.isFinite(limit) && limit > 0 ? limit : 10;
 
       const message =
         err?.response?.data?.error ||
@@ -100,13 +105,28 @@ const Login = () => {
         const waitSeconds = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 15 * 60;
         setLockedUntil(Date.now() + waitSeconds * 1000);
         setNow(Date.now());
+        setFailedAttempts(maxAttempts);
         setWarningMessage(
           `Too many login attempts. Please wait ${Math.ceil(waitSeconds / 60)} minutes before trying again.`
         );
-      } else if (status === 401 && Number.isFinite(remaining) && remaining <= 4 && remaining > 0) {
+      } else if (status === 401 && Number.isFinite(remaining) && remaining > 0) {
+        setFailedAttempts(maxAttempts - remaining);
         setWarningMessage(
-          `Warning: ${remaining} login attempt${remaining === 1 ? "" : "s"} remaining before temporary lockout.`
+          `Warning: ${remaining} login attempt${remaining === 1 ? "" : "s"} remaining out of ${maxAttempts} before temporary lockout.`
         );
+      } else if (status === 401) {
+        setFailedAttempts((prev) => {
+          const next = Math.min(prev + 1, maxAttempts);
+          const fallbackRemaining = Math.max(maxAttempts - next, 0);
+          if (fallbackRemaining > 0) {
+            setWarningMessage(
+              `Warning: ${fallbackRemaining} login attempt${fallbackRemaining === 1 ? "" : "s"} remaining out of ${maxAttempts} before temporary lockout.`
+            );
+          } else {
+            setWarningMessage("Login failed. Please check your credentials.");
+          }
+          return next;
+        });
       } else if (status !== 401) {
         setWarningMessage("");
       }

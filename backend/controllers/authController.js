@@ -189,6 +189,8 @@ exports.login = asyncHandler(async (req, res, next) => {
     if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
       user.lockUntil = new Date(Date.now() + ACCOUNT_LOCK_MINUTES * 60 * 1000);
       res.setHeader('Retry-After', ACCOUNT_LOCK_MINUTES * 60);
+      await user.save({ validateBeforeSave: false });
+      return next(new ErrorResponse('Account temporarily locked due to excessive failed login attempts', 429));
     }
 
     await user.save({ validateBeforeSave: false });

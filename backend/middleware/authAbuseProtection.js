@@ -28,7 +28,7 @@ const createWindowLimiter = ({ windowMs, max }) => {
     }
 
     entry.count += 1;
-    const blocked = entry.count > max;
+    const blocked = entry.count >= max;
     return { blocked, remaining: Math.max(max - entry.count, 0), resetAt: entry.resetAt };
   };
 };
