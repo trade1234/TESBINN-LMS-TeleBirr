@@ -81,17 +81,21 @@ exports.updateUserPassword = asyncHandler(async (req, res, next) => {
 exports.createAdminUser = asyncHandler(async (req, res, next) => {
   const { name, email, password, phone, location } = req.body || {};
 
+  if (Array.isArray(req.body) || Array.isArray(req.body?.users)) {
+    return next(new ErrorResponse('Batch user operations are not allowed for this endpoint', 400));
+  }
+
   if (!name || !email || !password) {
     return next(new ErrorResponse('Name, email, and password are required', 400));
   }
 
-  if (String(password).length < 6) {
-    return next(new ErrorResponse('Password must be at least 6 characters', 400));
+  if (String(password).length < 12) {
+    return next(new ErrorResponse('Admin password must be at least 12 characters', 400));
   }
 
   const user = await User.create({
     name: String(name).trim(),
-    email: String(email).trim(),
+    email: String(email).trim().toLowerCase(),
     password: String(password),
     phone: typeof phone === 'string' ? phone.trim() : undefined,
     location: typeof location === 'string' ? location.trim() : undefined,

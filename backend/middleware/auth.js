@@ -20,10 +20,14 @@ exports.protect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id).select('+tokenVersion');
 
     if (!user) {
       return next(new ErrorResponse('Not authorized to access this route', 401));
+    }
+
+    if (decoded.tokenVersion !== (user.tokenVersion || 0)) {
+      return next(new ErrorResponse('Session is no longer valid. Please log in again.', 401));
     }
 
     if (user.status !== 'active') {
@@ -43,9 +47,13 @@ exports.optionalProtect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id).select('+tokenVersion');
 
     if (!user || user.status !== 'active') {
+      return next();
+    }
+
+    if (decoded.tokenVersion !== (user.tokenVersion || 0)) {
       return next();
     }
 

@@ -35,6 +35,19 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false
   },
+  tokenVersion: {
+    type: Number,
+    default: 0
+  },
+  loginAttempts: {
+    type: Number,
+    default: 0,
+    select: false
+  },
+  lockUntil: {
+    type: Date,
+    select: false
+  },
   resetPasswordToken: String,
   resetPasswordExpire: Date,
   profileImage: {
@@ -189,11 +202,11 @@ UserSchema.pre('save', async function(next) {
 });
 
 // Sign JWT and return
-UserSchema.methods.getSignedJwtToken = function() {
+UserSchema.methods.getSignedJwtToken = function(expiresInOverride) {
   return jwt.sign(
-    { id: this._id, role: this.role },
+    { id: this._id, role: this.role, tokenVersion: this.tokenVersion || 0 },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE }
+    { expiresIn: expiresInOverride || process.env.JWT_EXPIRE || '1h' }
   );
 };
 

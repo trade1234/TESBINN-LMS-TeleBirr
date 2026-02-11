@@ -10,6 +10,8 @@ const {
 } = require('../controllers/userController');
 
 const { protect, authorize } = require('../middleware/auth');
+const { createAdminValidationRules } = require('../middleware/authInputValidation');
+const { validateRequest } = require('../middleware/validation');
 
 const router = express.Router();
 
@@ -17,7 +19,7 @@ router.use(protect);
 router.use(authorize('admin'));
 
 router.get('/', getUsers);
-router.post('/admin', createAdminUser);
+router.post('/admin', createAdminValidationRules, validateRequest, createAdminUser);
 router.get('/:id', getUser);
 router.put('/:id/status', updateUserStatus);
 router.put('/:id/approve-teacher', approveTeacher);

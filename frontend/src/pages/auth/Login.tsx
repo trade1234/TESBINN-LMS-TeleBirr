@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, LogIn, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,47 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [warningMessage, setWarningMessage] = useState("");
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const isLocked = lockedUntil !== null && now < lockedUntil;
+  const secondsRemaining = isLocked ? Math.max(Math.ceil((lockedUntil - now) / 1000), 0) : 0;
+
+  useEffect(() => {
+    if (!isLocked) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isLocked]);
+
+  const formatSeconds = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isLocked) {
+      const msg = `Too many attempts. Try again in ${formatSeconds(secondsRemaining)}.`;
+      setWarningMessage(msg);
+      toast({
+        title: "Login temporarily locked",
+        description: msg,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -29,6 +66,8 @@ const Login = () => {
         password,
       });
 
+      setWarningMessage("");
+      setLockedUntil(null);
       authStorage.setToken(res.data.token);
       authStorage.setRole(res.data.role);
 
@@ -45,10 +84,32 @@ const Login = () => {
         navigate("/student");
       }
     } catch (err: any) {
+      const status = err?.response?.status;
+      const headers = err?.response?.headers || {};
+      const remainingHeader = headers["x-ratelimit-remaining"];
+      const retryAfterHeader = headers["retry-after"];
+      const remaining = Number.parseInt(String(remainingHeader ?? ""), 10);
+      const retryAfter = Number.parseInt(String(retryAfterHeader ?? ""), 10);
+
       const message =
         err?.response?.data?.error ||
         err?.response?.data?.message ||
         "Login failed. Please check your credentials.";
+
+      if (status === 429) {
+        const waitSeconds = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 15 * 60;
+        setLockedUntil(Date.now() + waitSeconds * 1000);
+        setNow(Date.now());
+        setWarningMessage(
+          `Too many login attempts. Please wait ${Math.ceil(waitSeconds / 60)} minutes before trying again.`
+        );
+      } else if (status === 401 && Number.isFinite(remaining) && remaining <= 4 && remaining > 0) {
+        setWarningMessage(
+          `Warning: ${remaining} login attempt${remaining === 1 ? "" : "s"} remaining before temporary lockout.`
+        );
+      } else if (status !== 401) {
+        setWarningMessage("");
+      }
 
       toast({
         title: "Login failed",
@@ -150,13 +211,15 @@ const Login = () => {
               variant="gradient"
               size="lg"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || isLocked}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
                   Signing in...
                 </div>
+              ) : isLocked ? (
+                <>Try again in {formatSeconds(secondsRemaining)}</>
               ) : (
                 <>
                   <LogIn className="h-4 w-4 mr-2" />
@@ -164,6 +227,10 @@ const Login = () => {
                 </>
               )}
             </Button>
+
+            {warningMessage ? (
+              <p className="text-sm text-amber-600">{warningMessage}</p>
+            ) : null}
           </form>
 
           <div className="mt-6">

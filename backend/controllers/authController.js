@@ -4,6 +4,57 @@ const asyncHandler = require('../middleware/async');
 const sendEmail = require('../utils/sendEmail');
 const crypto = require('crypto');
 
+const toPositiveInt = (value, fallback) => {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const MAX_LOGIN_ATTEMPTS = toPositiveInt(process.env.MAX_LOGIN_ATTEMPTS, 10);
+const ACCOUNT_LOCK_MINUTES = toPositiveInt(process.env.ACCOUNT_LOCK_MINUTES, 15);
+
+const durationToSeconds = (duration) => {
+  if (typeof duration === 'number') return duration;
+  if (typeof duration !== 'string') return null;
+
+  const value = duration.trim();
+  if (!value) return null;
+
+  if (/^\d+$/.test(value)) {
+    return parseInt(value, 10);
+  }
+
+  const match = value.match(/^(\d+)\s*([smhd])$/i);
+  if (!match) return null;
+
+  const amount = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+
+  const factors = { s: 1, m: 60, h: 3600, d: 86400 };
+  return amount * factors[unit];
+};
+
+const resolveJwtExpiresIn = () => {
+  const configured = process.env.JWT_EXPIRE || '1h';
+  const maxSeconds = toPositiveInt(process.env.JWT_MAX_EXPIRE_SECONDS, 3600);
+  const configuredSeconds = durationToSeconds(configured);
+
+  if (!configuredSeconds) return `${maxSeconds}s`;
+  return configuredSeconds > maxSeconds ? `${maxSeconds}s` : configured;
+};
+
+const clearAuthCookie = (res) => {
+  res.cookie('token', 'none', {
+    expires: new Date(Date.now() + 1000),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production'
+  });
+};
+
+const getLockRemainingSeconds = (lockUntil) => {
+  if (!lockUntil) return 0;
+  return Math.max(Math.ceil((new Date(lockUntil).getTime() - Date.now()) / 1000), 0);
+};
+
 const sanitizeSkills = (skills) => {
   if (Array.isArray(skills)) {
     return skills.map((skill) => (typeof skill === 'string' ? skill.trim() : '')).filter(Boolean);
@@ -71,26 +122,25 @@ const buildUserUpdatePayload = (payload) => {
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
   const { name, email, password, role, phone } = req.body;
+  const requestedRole = typeof role === 'string' ? role.trim().toLowerCase() : 'student';
+  const normalizedName = String(name || '').trim();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedPhone = typeof phone === 'string' ? phone.trim() : undefined;
+
+  // Public registration is student-only to prevent role abuse.
+  if (requestedRole !== 'student') {
+    return next(new ErrorResponse('Only student self-registration is allowed', 403));
+  }
 
   // Create user
   const user = await User.create({
-    name,
-    email,
+    name: normalizedName,
+    email: normalizedEmail,
     password,
-    phone,
-    role: role || 'student',
-    status: role === 'teacher' ? 'pending' : 'active'
+    phone: normalizedPhone,
+    role: 'student',
+    status: 'active'
   });
-
-  // If teacher, send email to admin for approval
-  if (role === 'teacher') {
-    const message = `New teacher registration: ${name} (${email}) is requesting approval.`;
-    await sendEmail({
-      email: process.env.ADMIN_EMAIL || 'admin@tesbinn.com',
-      subject: 'New Teacher Registration',
-      message
-    });
-  }
 
   sendTokenResponse(user, 200, res);
 });
@@ -99,7 +149,8 @@ exports.register = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/login
 // @access  Public
 exports.login = asyncHandler(async (req, res, next) => {
-  const { email, password } = req.body;
+  const password = String(req.body.password || '');
+  const email = String(req.body.email || '').trim().toLowerCase();
 
   // Validate email & password
   if (!email || !password) {
@@ -107,10 +158,16 @@ exports.login = asyncHandler(async (req, res, next) => {
   }
 
   // Check for user
-  const user = await User.findOne({ email }).select('+password');
+  const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil +tokenVersion');
 
   if (!user) {
     return next(new ErrorResponse('Invalid credentials', 401));
+  }
+
+  if (user.lockUntil && user.lockUntil.getTime() > Date.now()) {
+    const retryAfter = getLockRemainingSeconds(user.lockUntil);
+    res.setHeader('Retry-After', retryAfter);
+    return next(new ErrorResponse('Account temporarily locked due to excessive failed login attempts', 429));
   }
 
   // Check if user is active
@@ -127,7 +184,20 @@ exports.login = asyncHandler(async (req, res, next) => {
   const isMatch = await user.matchPassword(password);
 
   if (!isMatch) {
+    user.loginAttempts = (user.loginAttempts || 0) + 1;
+
+    if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+      user.lockUntil = new Date(Date.now() + ACCOUNT_LOCK_MINUTES * 60 * 1000);
+      res.setHeader('Retry-After', ACCOUNT_LOCK_MINUTES * 60);
+    }
+
+    await user.save({ validateBeforeSave: false });
     return next(new ErrorResponse('Invalid credentials', 401));
+  }
+
+  if (user.loginAttempts || user.lockUntil) {
+    user.loginAttempts = 0;
+    user.lockUntil = undefined;
   }
 
   // Update last login
@@ -202,7 +272,7 @@ exports.updateSettings = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/auth/updatepassword
 // @access  Private
 exports.updatePassword = asyncHandler(async (req, res, next) => {
-  const user = await User.findById(req.user.id).select('+password');
+  const user = await User.findById(req.user.id).select('+password +tokenVersion');
 
   // Check current password
   if (!(await user.matchPassword(req.body.currentPassword))) {
@@ -210,6 +280,7 @@ exports.updatePassword = asyncHandler(async (req, res, next) => {
   }
 
   user.password = req.body.newPassword;
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
 
   sendTokenResponse(user, 200, res);
@@ -278,19 +349,36 @@ exports.resetPassword = asyncHandler(async (req, res, next) => {
   user.password = req.body.password;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
   await user.save();
 
   sendTokenResponse(user, 200, res);
 });
 
+// @desc    Logout user
+// @route   POST /api/v1/auth/logout
+// @access  Private
+exports.logout = asyncHandler(async (req, res, next) => {
+  await User.findByIdAndUpdate(req.user.id, { $inc: { tokenVersion: 1 } });
+  clearAuthCookie(res);
+
+  res.status(200).json({
+    success: true,
+    data: 'Logged out'
+  });
+});
+
 // Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
+  const jwtExpire = resolveJwtExpiresIn();
+  const jwtExpireSeconds = durationToSeconds(jwtExpire) || 3600;
+
   // Create token
-  const token = user.getSignedJwtToken();
+  const token = user.getSignedJwtToken(jwtExpire);
 
   const options = {
     expires: new Date(
-      Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000
+      Date.now() + jwtExpireSeconds * 1000
     ),
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production'
