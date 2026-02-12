@@ -11,6 +11,10 @@ const toPositiveInt = (value, fallback) => {
 
 const MAX_LOGIN_ATTEMPTS = toPositiveInt(process.env.MAX_LOGIN_ATTEMPTS, 10);
 const ACCOUNT_LOCK_MINUTES = toPositiveInt(process.env.ACCOUNT_LOCK_MINUTES, 15);
+const ACCOUNT_LOCK_SECOND_DURATION_HOURS = toPositiveInt(
+  process.env.ACCOUNT_LOCK_SECOND_DURATION_HOURS,
+  24
+);
 
 const durationToSeconds = (duration) => {
   if (typeof duration === 'number') return duration;
@@ -158,7 +162,9 @@ exports.login = asyncHandler(async (req, res, next) => {
   }
 
   // Check for user
-  const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil +tokenVersion');
+  const user = await User.findOne({ email }).select(
+    '+password +loginAttempts +lockoutCount +lockUntil +tokenVersion'
+  );
 
   if (!user) {
     return next(new ErrorResponse('Invalid credentials', 401));
@@ -168,6 +174,13 @@ exports.login = asyncHandler(async (req, res, next) => {
     const retryAfter = getLockRemainingSeconds(user.lockUntil);
     res.setHeader('Retry-After', retryAfter);
     return next(new ErrorResponse('Account temporarily locked due to excessive failed login attempts', 429));
+  }
+
+  // Lock window expired: reset attempt counter to give a fresh attempt budget.
+  if (user.lockUntil && user.lockUntil.getTime() <= Date.now()) {
+    user.lockUntil = undefined;
+    user.loginAttempts = 0;
+    await user.save({ validateBeforeSave: false });
   }
 
   // Check if user is active
@@ -187,8 +200,14 @@ exports.login = asyncHandler(async (req, res, next) => {
     user.loginAttempts = (user.loginAttempts || 0) + 1;
 
     if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-      user.lockUntil = new Date(Date.now() + ACCOUNT_LOCK_MINUTES * 60 * 1000);
-      res.setHeader('Retry-After', ACCOUNT_LOCK_MINUTES * 60);
+      user.lockoutCount = (user.lockoutCount || 0) + 1;
+      const lockDurationSeconds =
+        user.lockoutCount >= 2
+          ? ACCOUNT_LOCK_SECOND_DURATION_HOURS * 60 * 60
+          : ACCOUNT_LOCK_MINUTES * 60;
+
+      user.lockUntil = new Date(Date.now() + lockDurationSeconds * 1000);
+      res.setHeader('Retry-After', lockDurationSeconds);
       await user.save({ validateBeforeSave: false });
       return next(new ErrorResponse('Account temporarily locked due to excessive failed login attempts', 429));
     }

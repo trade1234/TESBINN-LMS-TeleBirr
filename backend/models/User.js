@@ -44,6 +44,11 @@ const UserSchema = new mongoose.Schema({
     default: 0,
     select: false
   },
+  lockoutCount: {
+    type: Number,
+    default: 0,
+    select: false
+  },
   lockUntil: {
     type: Date,
     select: false
