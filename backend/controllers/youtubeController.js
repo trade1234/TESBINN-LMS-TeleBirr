@@ -110,6 +110,35 @@ exports.getChannelVideos = asyncHandler(async (req, res, next) => {
 
   let channelId = null;
 
+  const resolveChannelIdFromEnv = (requestedHandle) => {
+    const mapRaw = (process.env.YOUTUBE_CHANNEL_ID_MAP || '').trim();
+    if (mapRaw) {
+      try {
+        const parsed = JSON.parse(mapRaw);
+        if (parsed && typeof parsed === 'object') {
+          const candidate = parsed[requestedHandle];
+          if (typeof candidate === 'string' && /^UC[a-zA-Z0-9_-]{20,}$/.test(candidate.trim())) {
+            return candidate.trim();
+          }
+        }
+      } catch (err) {
+        // Ignore invalid JSON and fall back to other methods.
+      }
+    }
+
+    const defaultHandle = (process.env.YOUTUBE_DEFAULT_HANDLE || '').trim().replace(/^@/, '');
+    const defaultChannelId = (process.env.YOUTUBE_DEFAULT_CHANNEL_ID || '').trim();
+    if (
+      defaultChannelId &&
+      (!defaultHandle || defaultHandle === requestedHandle) &&
+      /^UC[a-zA-Z0-9_-]{20,}$/.test(defaultChannelId)
+    ) {
+      return defaultChannelId;
+    }
+
+    return null;
+  };
+
   // Optional bypass: if the environment cannot reach YouTube channel pages reliably,
   // callers can pass `channelId=UC...` directly to use the feed endpoint only.
   if (channelIdOverride) {
@@ -118,16 +147,24 @@ exports.getChannelVideos = asyncHandler(async (req, res, next) => {
     }
     channelId = channelIdOverride;
   } else {
+    channelId = resolveChannelIdFromEnv(handle);
+  }
+
+  if (!channelId) {
     let channelHtml = '';
     try {
       channelHtml = await fetchText(`https://www.youtube.com/@${handle}`);
     } catch (err) {
-      return next(
-        new ErrorResponse(
-          'Unable to fetch YouTube channel page. If this keeps failing, call this endpoint with ?channelId=UC... to bypass handle resolution.',
-          502
-        )
-      );
+      // In many production environments YouTube is blocked. Prefer returning a stable JSON response
+      // so the frontend can render "no videos" instead of failing hard.
+      console.log('YouTube handle resolution failed:', err && err.message ? err.message : err);
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        warning:
+          'Unable to resolve YouTube handle from this server environment. Configure YOUTUBE_CHANNEL_ID_MAP or YOUTUBE_DEFAULT_CHANNEL_ID to bypass handle resolution.',
+      });
     }
     channelId = extractChannelId(channelHtml);
   }
@@ -140,7 +177,14 @@ exports.getChannelVideos = asyncHandler(async (req, res, next) => {
   try {
     feedXml = await fetchText(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
   } catch (err) {
-    return next(new ErrorResponse('Unable to fetch YouTube video feed. Please try again later.', 502));
+    console.log('YouTube feed fetch failed:', err && err.message ? err.message : err);
+    return res.status(200).json({
+      success: true,
+      count: 0,
+      data: [],
+      warning:
+        'Unable to fetch YouTube feed from this server environment. Check outbound network/DNS/firewall for youtube.com.',
+    });
   }
   const videos = parseFeed(feedXml, limit).filter((video) => video.id);
 
