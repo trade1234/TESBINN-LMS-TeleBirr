@@ -56,8 +56,8 @@ type ChannelVideo = {
 
 const testimonials = [
   {
-    name: "Amanuel T.",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
+    name: "Yared Muluneh",
+    avatar: "https://res.cloudinary.com/dznbmggrk/image/upload/ar_1:1,c_crop,g_auto:face,w_300/r_max/photo_2026-02-17_10-56-35_b14dgb",
     content: "After TESBINN's training, I successfully started my own export business.",
   },
   {
