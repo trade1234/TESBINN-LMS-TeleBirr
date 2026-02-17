@@ -61,13 +61,13 @@ const testimonials = [
     content: "After TESBINN's training, I successfully started my own export business.",
   },
   {
-    name: "Bethehem S.",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
+    name: "Nigiste G/Egziabher",
+    avatar: "https://res.cloudinary.com/dznbmggrk/image/upload/ar_1:1,c_crop,g_auto:face,w_300/r_max/Screenshot_2026-02-17_111922_kdumoj",
     content: "The courses were practical and very informative.",
   },
   {
-    name: "Elias M.",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop",
+    name: "Yeabsira Zerihun",
+    avatar: "https://res.cloudinary.com/dznbmggrk/image/upload/ar_1:1,c_crop,g_auto:face,w_300/r_max/Gemini_Generated_Image_603se5603se5603s_cwwogx",
     content: "Great experience! Highly recommended.",
   },
 ];
