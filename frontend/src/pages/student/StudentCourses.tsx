@@ -125,15 +125,26 @@ const StudentCourses = () => {
     return filteredEnrollments.map((enrollment) => {
       const course = enrollment.course;
       const approvalStatus = enrollment.approvalStatus ?? "approved";
+      const requiresPayment = Number(course.price || 0) > 0;
+      const isPaymentPending =
+        approvalStatus === "pending" &&
+        requiresPayment &&
+        enrollment.paymentStatus !== "paid";
       const isApproved = approvalStatus === "approved";
       const ctaLabel =
-        approvalStatus === "pending"
+        isPaymentPending
+          ? "Complete Payment"
+          : approvalStatus === "pending"
           ? "Pending approval"
           : approvalStatus === "rejected"
             ? "Request access again"
             : undefined;
       const ctaHref =
-        approvalStatus === "rejected" ? `/courses/${course._id}` : `/student/courses/${course._id}`;
+        isPaymentPending
+          ? `/checkout/${course._id}`
+          : approvalStatus === "rejected"
+            ? `/courses/${course._id}`
+            : `/student/courses/${course._id}`;
       const lessons = (course.modules || []).reduce((sum, module) => sum + (module.lessons || []).length, 0);
       const thumbnail = course.imageUrl?.startsWith("http")
         ? course.imageUrl
@@ -155,9 +166,10 @@ const StudentCourses = () => {
         enrolled: isApproved,
         status: enrollment.completionStatus,
         approvalStatus,
+        isPaymentPending,
         ctaHref,
         ctaLabel,
-        ctaDisabled: approvalStatus === "pending",
+        ctaDisabled: approvalStatus === "pending" && !isPaymentPending,
       };
     });
   }, [filteredEnrollments]);
@@ -261,11 +273,13 @@ const StudentCourses = () => {
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {studentCourseCards.map((card) => {
-                const { status, approvalStatus, ctaHref, ctaLabel, ctaDisabled, ...courseProps } = card;
+                const { status, approvalStatus, isPaymentPending, ctaHref, ctaLabel, ctaDisabled, ...courseProps } = card;
                 const statusLabel =
                   approvalStatus === "approved"
                     ? statusLabelMap[status]
-                    : approvalStatus === "pending"
+                    : isPaymentPending
+                      ? "Payment pending"
+                      : approvalStatus === "pending"
                       ? "Pending approval"
                       : "Rejected";
                 const badgeVariant =

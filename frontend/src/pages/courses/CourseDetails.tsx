@@ -133,6 +133,13 @@ const CourseDetails = () => {
     return (cat && map[cat]) || "Other";
   };
 
+  const requiresPayment = Number(course?.price || 0) > 0;
+  const isPaymentPending =
+    Boolean(myEnrollment) &&
+    myEnrollment?.approvalStatus === "pending" &&
+    requiresPayment &&
+    myEnrollment?.paymentStatus !== "paid";
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -218,7 +225,9 @@ const CourseDetails = () => {
                   <div className="glass-card rounded-xl p-6 lg:sticky lg:top-28">
                     <h3 className="text-lg font-semibold mb-2">Ready to start?</h3>
                     <p className="text-sm text-muted-foreground mb-5">
-                      {myEnrollment?.approvalStatus === "pending"
+                      {isPaymentPending
+                        ? "Your payment is not complete yet. Retry checkout to finish enrollment."
+                        : myEnrollment?.approvalStatus === "pending"
                         ? "An admin needs to approve your enrollment before you can access lessons."
                         : myEnrollment
                           ? "You are enrolled. Jump back into your course whenever you're ready."
@@ -237,12 +246,14 @@ const CourseDetails = () => {
                       disabled={
                         isEnrolling ||
                         (myEnrollment && isCheckingEnrollment) ||
-                        myEnrollment?.approvalStatus === "pending"
+                        (myEnrollment?.approvalStatus === "pending" && !isPaymentPending)
                       }
                     >
                       {isEnrolling
                         ? "Submitting..."
-                        : myEnrollment?.approvalStatus === "pending"
+                        : isPaymentPending
+                          ? "Complete Payment"
+                          : myEnrollment?.approvalStatus === "pending"
                           ? "Pending approval"
                           : myEnrollment?.approvalStatus === "approved"
                             ? "Continue Learning"

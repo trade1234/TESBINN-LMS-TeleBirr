@@ -287,8 +287,16 @@ CourseSchema.pre('save', function(next) {
 });
 
 // Cascade delete enrollments when a course is deleted
-CourseSchema.pre('remove', async function(next) {
+CourseSchema.pre('deleteOne', { document: true, query: false }, async function(next) {
   await this.model('Enrollment').deleteMany({ course: this._id });
+  next();
+});
+
+CourseSchema.pre('findOneAndDelete', async function(next) {
+  const doc = await this.model.findOne(this.getQuery()).select('_id');
+  if (doc) {
+    await this.model('Enrollment').deleteMany({ course: doc._id });
+  }
   next();
 });
 
