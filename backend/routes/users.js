@@ -7,6 +7,7 @@ const {
   approveTeacher,
   updateUserPassword,
   createAdminUser,
+  deleteUser,
 } = require('../controllers/userController');
 
 const { protect, authorize } = require('../middleware/auth');
@@ -24,5 +25,6 @@ router.get('/:id', getUser);
 router.put('/:id/status', updateUserStatus);
 router.put('/:id/approve-teacher', approveTeacher);
 router.put('/:id/password', updateUserPassword);
+router.delete('/:id', deleteUser);
 
 module.exports = router;

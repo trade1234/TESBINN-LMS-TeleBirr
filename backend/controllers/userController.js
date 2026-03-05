@@ -1,4 +1,8 @@
 const User = require('../models/User');
+const Course = require('../models/Course');
+const Enrollment = require('../models/Enrollment');
+const Certificate = require('../models/Certificate');
+const Notification = require('../models/Notification');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
 
@@ -106,4 +110,45 @@ exports.createAdminUser = asyncHandler(async (req, res, next) => {
   const sanitizedUser = await User.findById(user._id).select('-__v');
 
   res.status(201).json({ success: true, data: sanitizedUser });
+});
+
+exports.deleteUser = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    return next(new ErrorResponse(`No user with the id of ${req.params.id}`, 404));
+  }
+
+  if (req.user.id === user._id.toString()) {
+    return next(new ErrorResponse('You cannot delete your own account', 400));
+  }
+
+  if (user.role === 'admin') {
+    const adminCount = await User.countDocuments({ role: 'admin' });
+    if (adminCount <= 1) {
+      return next(new ErrorResponse('Cannot delete the last admin account', 400));
+    }
+  }
+
+  if (user.role === 'teacher') {
+    const teacherCourseCount = await Course.countDocuments({ teacher: user._id });
+    if (teacherCourseCount > 0) {
+      return next(
+        new ErrorResponse(
+          'Cannot delete teacher with existing courses. Delete or reassign courses first.',
+          400
+        )
+      );
+    }
+  }
+
+  await Promise.all([
+    Enrollment.deleteMany({ student: user._id }),
+    Certificate.deleteMany({ student: user._id }),
+    Notification.deleteMany({ user: user._id }),
+  ]);
+
+  await user.deleteOne();
+
+  res.status(200).json({ success: true, data: {} });
 });

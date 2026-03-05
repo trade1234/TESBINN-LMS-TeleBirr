@@ -34,6 +34,7 @@ const AdminUsers = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isCreateAdminOpen, setIsCreateAdminOpen] = useState(false);
+  const [deletingUserIds, setDeletingUserIds] = useState<string[]>([]);
   const [adminForm, setAdminForm] = useState({
     name: "",
     email: "",
@@ -311,6 +312,48 @@ const AdminUsers = () => {
     }
   };
 
+  const handleDeleteUser = async (user: User) => {
+    const confirmed = window.confirm(
+      `Delete ${user.name} (${user.email})? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingUserIds((prev) => [...prev, user._id]);
+    try {
+      await api.delete(`/users/${user._id}`);
+      setUsers((prev) => prev.filter((current) => current._id !== user._id));
+
+      if (selectedUserId === user._id) {
+        closeUserDetails();
+      }
+
+      toast({
+        title: "User deleted",
+        description: `${user.name} has been removed.`,
+      });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        "Failed to delete user.";
+
+      if (status === 401) {
+        authStorage.clearAll();
+        navigate("/login");
+        return;
+      }
+
+      toast({
+        title: "Delete failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingUserIds((prev) => prev.filter((id) => id !== user._id));
+    }
+  };
+
   const userForDetails =
     selectedUser || users.find((user) => user._id === selectedUserId) || null;
 
@@ -429,34 +472,48 @@ const AdminUsers = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user._id} className="border-b border-border/50 hover:bg-muted/50">
-                      <td className="py-4 px-4 font-medium">{user.name}</td>
-                      <td className="py-4 px-4 text-muted-foreground">{user.email}</td>
-                      <td className="py-4 px-4 capitalize">{user.role}</td>
-                      <td className="py-4 px-4">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${statusBadgeClass(
-                            user.status
-                          )}`}
-                        >
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-muted-foreground">
-                        {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
-                      </td>
-                      <td className="py-4 px-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openUserDetails(user._id)}
-                        >
-                          View details
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredUsers.map((user) => {
+                    const isDeleting = deletingUserIds.includes(user._id);
+                    return (
+                      <tr key={user._id} className="border-b border-border/50 hover:bg-muted/50">
+                        <td className="py-4 px-4 font-medium">{user.name}</td>
+                        <td className="py-4 px-4 text-muted-foreground">{user.email}</td>
+                        <td className="py-4 px-4 capitalize">{user.role}</td>
+                        <td className="py-4 px-4">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${statusBadgeClass(
+                              user.status
+                            )}`}
+                          >
+                            {user.status}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-muted-foreground">
+                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-"}
+                        </td>
+                        <td className="py-4 px-4 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openUserDetails(user._id)}
+                              disabled={isDeleting}
+                            >
+                              View details
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user)}
+                              disabled={isDeleting}
+                            >
+                              {isDeleting ? "Deleting..." : "Delete"}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             ) : (
