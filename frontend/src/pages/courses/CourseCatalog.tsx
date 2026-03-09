@@ -12,6 +12,7 @@ import {
   Layers,
   Zap,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Header from "@/components/layout/Header";
@@ -23,6 +24,7 @@ import { minutesToDurationLabel } from "@/lib/format";
 import type { ApiResponse, Course } from "@/lib/types";
 
 const CourseCatalog = () => {
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [courses, setCourses] = useState<Course[]>([]);
@@ -56,15 +58,29 @@ const CourseCatalog = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const searchFromUrl = searchParams.get("search") || "";
+    const categoryFromUrl = searchParams.get("category") || "all";
+
+    setSearchQuery(searchFromUrl);
+    setSelectedCategory(categoryFromUrl);
+  }, [searchParams]);
+
   const filteredCourses = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const searchTerms = q.split("|").map((term) => term.trim()).filter(Boolean);
+    const hasOrSearch = searchTerms.length > 1;
+
     return courses.filter((course) => {
+      const title = course.title.toLowerCase();
+      const description = course.description.toLowerCase();
       const matchesCategory =
         selectedCategory === "all" || course.category === selectedCategory;
       const matchesQuery = !q
         ? true
-        : course.title.toLowerCase().includes(q) ||
-          course.description.toLowerCase().includes(q);
+        : hasOrSearch
+          ? searchTerms.some((term) => title.includes(term) || description.includes(term))
+          : title.includes(q) || description.includes(q);
       return matchesCategory && matchesQuery;
     });
   }, [courses, searchQuery, selectedCategory]);

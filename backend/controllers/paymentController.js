@@ -5,12 +5,67 @@ const ErrorResponse = require("../utils/errorResponse");
 const asyncHandler = require("../middleware/async");
 const applyFabricToken = require("../service/applyFabricTokenService");
 const orderService = require("../service/requestCreateOrderService");
+const { createNotificationForUser } = require("../utils/notifications");
 
 const createMerchantOrderId = () =>
   `ENR${Date.now()}${Math.floor(Math.random() * 10000)}`;
 
 const isSuccessStatus = (status) =>
-  ["PAY_SUCCESS", "Completed", "COMPLETED"].includes(status);
+  ["PAY_SUCCESS", "Completed", "COMPLETED", "SUCCESS", "PAID"].includes(status);
+
+const getNotifyValue = (source, ...keys) => {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const normalizeNotifyPayload = (payload) => {
+  const source = payload?.biz_content && typeof payload.biz_content === "object"
+    ? payload.biz_content
+    : payload;
+
+  return {
+    merchOrderId: getNotifyValue(source, "merch_order_id", "merchOrderId"),
+    paymentOrderId: getNotifyValue(
+      source,
+      "payment_order_id",
+      "paymentOrderId",
+      "third_party_order_id",
+      "thirdPartyOrderId",
+      "trans_id",
+      "transId",
+      "transaction_id",
+      "transactionId"
+    ),
+    tradeStatus: getNotifyValue(source, "trade_status", "tradeStatus"),
+    orderStatus: getNotifyValue(source, "order_status", "orderStatus"),
+    transactionId: getNotifyValue(
+      source,
+      "transaction_id",
+      "transactionId",
+      "trans_id",
+      "transId"
+    ),
+    thirdPartyOrderId: getNotifyValue(source, "third_party_order_id", "thirdPartyOrderId"),
+    finishTime: getNotifyValue(
+      source,
+      "finish_time",
+      "finishTime",
+      "trans_end_time",
+      "transEndTime"
+    ),
+    notifyTime: getNotifyValue(source, "notify_time", "notifyTime"),
+    notifyUrl: getNotifyValue(source, "notify_url", "notifyUrl"),
+    totalAmount: getNotifyValue(source, "total_amount", "totalAmount"),
+    transCurrency: getNotifyValue(source, "trans_currency", "transCurrency"),
+    appId: getNotifyValue(source, "appid", "appId"),
+    merchCode: getNotifyValue(source, "merch_code", "merchCode"),
+  };
+};
 
 const sanitizeTitle = (value) => {
   const raw = typeof value === "string" ? value : "";
@@ -160,40 +215,125 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
 
 exports.telebirrNotify = asyncHandler(async (req, res) => {
   console.log("[Telebirr] notify payload", req.body);
+
+  const notifyData = normalizeNotifyPayload(req.body || {});
   const {
-    merch_order_id: merchOrderId,
-    payment_order_id: paymentOrderId,
-    trade_status: tradeStatus,
-    order_status: orderStatus,
-  } = req.body || {};
+    merchOrderId,
+    paymentOrderId,
+    tradeStatus,
+    orderStatus,
+    transactionId,
+    thirdPartyOrderId,
+    finishTime,
+    notifyTime,
+    notifyUrl,
+    totalAmount,
+    transCurrency,
+    appId,
+    merchCode,
+  } = notifyData;
 
   if (!merchOrderId) {
+    console.warn("[Telebirr] Missing merchant order id in notify payload");
     return res.status(200).json({ success: false, message: "Missing order id" });
   }
 
   const enrollment = await Enrollment.findOne({ merchOrderId });
   if (!enrollment) {
+    console.warn("[Telebirr] Enrollment not found for merchant order", { merchOrderId });
     return res.status(200).json({ success: false, message: "Enrollment not found" });
   }
 
   const status = tradeStatus || orderStatus || "";
   if (isSuccessStatus(status)) {
     const wasApproved = enrollment.approvalStatus === "approved";
+    const wasPaid = enrollment.paymentStatus === "paid";
     enrollment.approvalStatus = "approved";
     enrollment.paymentStatus = "paid";
     if (paymentOrderId) enrollment.paymentOrderId = paymentOrderId;
     await enrollment.save();
 
+    console.log("[Telebirr] Payment confirmed", {
+      merchOrderId,
+      paymentOrderId: paymentOrderId || null,
+      thirdPartyOrderId: thirdPartyOrderId || null,
+      transactionId: transactionId || null,
+      finishTime: finishTime || null,
+      notifyTime: notifyTime || null,
+      notifyUrl: notifyUrl || null,
+      totalAmount: totalAmount || null,
+      transCurrency: transCurrency || null,
+      appId: appId || null,
+      merchCode: merchCode || null,
+      enrollmentId: enrollment._id.toString(),
+      studentId: enrollment.student.toString(),
+      approvalStatus: enrollment.approvalStatus,
+      paymentStatus: enrollment.paymentStatus,
+    });
+
+    const [course, student] = await Promise.all([
+      Course.findById(enrollment.course).select("title"),
+      User.findById(enrollment.student).select("name email preferences"),
+    ]);
+
     if (!wasApproved) {
-      const course = await Course.findById(enrollment.course);
       if (course) {
         course.totalEnrollments = (course.totalEnrollments || 0) + 1;
         await course.save({ validateBeforeSave: false });
       }
     }
+
+    if (!wasPaid) {
+      await createNotificationForUser(
+        student,
+        {
+          type: "enrollment_approved",
+          title: "Telebirr payment confirmed",
+          message: `Your payment for "${course?.title || "your course"}" is confirmed. Enrollment approved.`,
+          link: "/student/courses",
+          meta: {
+            merchOrderId,
+            paymentOrderId: paymentOrderId || null,
+            thirdPartyOrderId: thirdPartyOrderId || null,
+            transactionId: transactionId || null,
+            finishTime: finishTime || null,
+            notifyTime: notifyTime || null,
+            notifyUrl: notifyUrl || null,
+            totalAmount: totalAmount || null,
+            transCurrency: transCurrency || null,
+            enrollmentId: enrollment._id,
+            courseId: enrollment.course,
+          },
+        },
+        { preferenceKey: "enrollmentUpdates", sendEmail: true }
+      );
+
+      console.log("[Telebirr] Payment notification logged", {
+        merchOrderId,
+        enrollmentId: enrollment._id.toString(),
+        notificationType: "enrollment_approved",
+      });
+    }
   } else {
     enrollment.paymentStatus = "failed";
     await enrollment.save();
+    console.log("[Telebirr] Payment not completed", {
+      merchOrderId,
+      paymentOrderId: paymentOrderId || null,
+      thirdPartyOrderId: thirdPartyOrderId || null,
+      transactionId: transactionId || null,
+      finishTime: finishTime || null,
+      notifyTime: notifyTime || null,
+      notifyUrl: notifyUrl || null,
+      totalAmount: totalAmount || null,
+      transCurrency: transCurrency || null,
+      appId: appId || null,
+      merchCode: merchCode || null,
+      enrollmentId: enrollment._id.toString(),
+      tradeStatus: tradeStatus || null,
+      orderStatus: orderStatus || null,
+      paymentStatus: enrollment.paymentStatus,
+    });
   }
 
   res.status(200).json({ success: true });

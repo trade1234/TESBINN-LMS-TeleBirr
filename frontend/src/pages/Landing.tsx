@@ -17,7 +17,6 @@ import {
   Coffee,
   Users,
   Bot,
-  Truck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -27,14 +26,47 @@ import { api } from "@/lib/api";
 import type { Advert, ApiResponse, Schedule } from "@/lib/types";
 
 const trainings = [
-  { icon: Ship, label: "Import-Export" },
-  { icon: TrendingUp, label: "Capital Market" },
-  { icon: Megaphone, label: "Digital Marketing" },
-  { icon: ShoppingBag, label: "Sales & Marketing" },
-  { icon: Coffee, label: "Coffee & Barista" },
-  { icon: Users, label: "Customer Service" },
-  { icon: Bot, label: "AI for Business" },
-  { icon: Truck, label: "Logistics & Supply Chain" },
+  {
+    icon: Ship,
+    label: "Import-Export",
+    href: "/courses?search=International%20Trade%20Import%2FExport",
+  },
+  {
+    icon: TrendingUp,
+    label: "Capital Market",
+    href: "/courses?search=Stock%20Market",
+  },
+  {
+    icon: Megaphone,
+    label: "Digital Marketing",
+    href: "/courses?category=marketing&search=Digital%20Marketing",
+  },
+  {
+    icon: ShoppingBag,
+    label: "Sales & Marketing",
+    href: "/courses?category=marketing&search=Sales",
+  },
+  {
+    icon: Coffee,
+    label: "Coffee & Barista",
+    href: "/courses?search=coffee%7Cbarista",
+  },
+  {
+    icon: Users,
+    label: "Customer Service",
+    href: "/courses?category=business&search=Customer%20Service",
+  },
+  {
+    icon: Bot,
+    label: "AI for Business",
+    href: "/courses?category=ai&search=AI%20for%20Business",
+  },
+  {
+    icon: BookOpen,
+    label: "View All Trainings",
+    href: "/courses",
+    highlighted: true,
+  },
 ];
 
 const quickLinks = [
@@ -237,22 +269,35 @@ const Landing = () => {
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {trainings.map((training) => (
-              <div
+              <Link
                 key={training.label}
-                className="flex items-center gap-3 p-4 bg-background rounded-lg border border-border hover:border-primary/50 hover:shadow-md transition-all cursor-pointer"
+                to={training.href}
+                className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
+                  training.highlighted
+                    ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90 hover:shadow-md"
+                    : "bg-background border-border hover:border-primary/50 hover:shadow-md"
+                }`}
               >
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <training.icon className="h-5 w-5 text-primary" />
+                <div
+                  className={`p-2 rounded-lg ${
+                    training.highlighted ? "bg-primary-foreground/20" : "bg-primary/10"
+                  }`}
+                >
+                  <training.icon
+                    className={`h-5 w-5 ${
+                      training.highlighted ? "text-primary-foreground" : "text-primary"
+                    }`}
+                  />
                 </div>
-                <span className="text-sm font-medium text-foreground">{training.label}</span>
-              </div>
+                <span
+                  className={`text-sm font-medium ${
+                    training.highlighted ? "text-primary-foreground" : "text-foreground"
+                  }`}
+                >
+                  {training.label}
+                </span>
+              </Link>
             ))}
-          </div>
-          <div className="flex justify-center mt-8">
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              View All Trainings
-              <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
           </div>
         </div>
       </section>
