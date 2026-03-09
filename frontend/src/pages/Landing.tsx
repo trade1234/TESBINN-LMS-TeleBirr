@@ -203,7 +203,7 @@ const Landing = () => {
             </div>
             <div className="hidden lg:block">
               <img
-                src="https://cloud.appwrite.io/v1/storage/buckets/68de2cd2000edc9d02c9/files/lesson-30e0e9831a4b43c9a349d078e74d/view?project=66fa8216001614a2f7cd"
+                src="https://tesbinn.s3.us-east-1.amazonaws.com/lesson-70c5da13ad114f3db68f620f0cb2"
                 alt="Training session"
                 className="rounded-lg shadow-xl"
               />

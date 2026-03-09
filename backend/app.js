@@ -47,8 +47,10 @@ const defaultOrigins = [
   'https://www.tesbinn.com',
   'http://tesbinn.com',       
   'https://tesbinn-lms-frontend.vercel.app',
-  'http://localhost:8081',                
+  'http://localhost:8081',
+  'http://localhost:8082',                                
   'http://172.16.0.2:8081',
+  'http://172.16.0.2:8082',
   'http://44.209.130.119',
   'http://13.222.168.70/api/v1/payments/telebirr/create-order'
 ];

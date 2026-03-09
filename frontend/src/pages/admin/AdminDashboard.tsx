@@ -22,6 +22,7 @@ import ProgressChart from "@/components/dashboard/ProgressChart";
 import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import type { ApiResponse, Course, User } from "@/lib/types";
+import type { AdminAnalyticsData } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 const AdminDashboard = () => {
@@ -36,6 +37,10 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [approvingTeacherId, setApprovingTeacherId] = useState<string | null>(null);
   const [approvingCourseId, setApprovingCourseId] = useState<string | null>(null);
+  const [weeklyRevenue, setWeeklyRevenue] = useState<number | null>(null);
+  const [monthlyRevenue, setMonthlyRevenue] = useState<number | null>(null);
+  const [weeklyNewUsers, setWeeklyNewUsers] = useState<number | null>(null);
+  const [monthlyNewUsers, setMonthlyNewUsers] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -49,11 +54,24 @@ const AdminDashboard = () => {
 
       setIsLoading(true);
       try {
-        const [pendingTeachersRes, usersRes, pendingCoursesRes, coursesRes] = await Promise.all([
+        const [
+          pendingTeachersRes,
+          usersRes,
+          pendingCoursesRes,
+          coursesRes,
+          weeklyAnalyticsRes,
+          monthlyAnalyticsRes,
+        ] = await Promise.all([
           api.get<ApiResponse<User[]>>("/users", { params: { role: "teacher", status: "pending" } }),
           api.get<ApiResponse<User[]>>("/users"),
           api.get<ApiResponse<Course[]>>("/courses/pending"),
           api.get<ApiResponse<Course[]>>("/courses/admin/all"),
+          api.get<ApiResponse<AdminAnalyticsData>>("/analytics/admin", {
+            params: { range: "7d" },
+          }),
+          api.get<ApiResponse<AdminAnalyticsData>>("/analytics/admin", {
+            params: { range: "30d" },
+          }),
         ]);
 
         if (!active) return;
@@ -66,6 +84,10 @@ const AdminDashboard = () => {
             ? usersRes.data.count
             : (usersRes.data.data || []).length
         );
+        setWeeklyRevenue(Number(weeklyAnalyticsRes.data.data?.summary?.revenue || 0));
+        setMonthlyRevenue(Number(monthlyAnalyticsRes.data.data?.summary?.revenue || 0));
+        setWeeklyNewUsers(Number(weeklyAnalyticsRes.data.data?.summary?.newUsers || 0));
+        setMonthlyNewUsers(Number(monthlyAnalyticsRes.data.data?.summary?.newUsers || 0));
       } catch (err: any) {
         if (!active) return;
         const status = err?.response?.status;
@@ -96,6 +118,9 @@ const AdminDashboard = () => {
       active = false;
     };
   }, [navigate, toast]);
+
+  const formatRevenue = (value: number | null) =>
+    value === null ? "..." : `ETB ${Math.round(value).toLocaleString()}`;
 
 const adminQuickLinks = [
   {
@@ -282,6 +307,41 @@ const adminQuickLinks = [
             changeType="neutral"
             icon={TrendingUp}
             iconColor="success"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            title="Weekly Revenue"
+            value={formatRevenue(weeklyRevenue)}
+            change="Approved enrollments (7 days)"
+            changeType="neutral"
+            icon={TrendingUp}
+            iconColor="success"
+          />
+          <StatsCard
+            title="Monthly Revenue"
+            value={formatRevenue(monthlyRevenue)}
+            change="Approved enrollments (30 days)"
+            changeType="neutral"
+            icon={TrendingUp}
+            iconColor="success"
+          />
+          <StatsCard
+            title="Weekly New Users"
+            value={isLoading || weeklyNewUsers === null ? "..." : weeklyNewUsers.toLocaleString()}
+            change="Registered in last 7 days"
+            changeType="neutral"
+            icon={Users}
+            iconColor="primary"
+          />
+          <StatsCard
+            title="Monthly New Users"
+            value={isLoading || monthlyNewUsers === null ? "..." : monthlyNewUsers.toLocaleString()}
+            change="Registered in last 30 days"
+            changeType="neutral"
+            icon={Users}
+            iconColor="primary"
           />
         </div>
 

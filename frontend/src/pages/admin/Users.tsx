@@ -35,6 +35,8 @@ const AdminUsers = () => {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isCreateAdminOpen, setIsCreateAdminOpen] = useState(false);
   const [deletingUserIds, setDeletingUserIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
   const [adminForm, setAdminForm] = useState({
     name: "",
     email: "",
@@ -118,6 +120,11 @@ const AdminUsers = () => {
       return nameMatch || emailMatch;
     });
   }, [roleFilter, searchTerm, users]);
+
+  useEffect(() => {
+    const visibleIds = new Set(filteredUsers.map((user) => user._id));
+    setSelectedUserIds((prev) => prev.filter((id) => visibleIds.has(id)));
+  }, [filteredUsers]);
 
   useEffect(() => {
     if (!isDetailOpen || !selectedUserId) return;
@@ -322,6 +329,7 @@ const AdminUsers = () => {
     try {
       await api.delete(`/users/${user._id}`);
       setUsers((prev) => prev.filter((current) => current._id !== user._id));
+      setSelectedUserIds((prev) => prev.filter((id) => id !== user._id));
 
       if (selectedUserId === user._id) {
         closeUserDetails();
@@ -352,6 +360,94 @@ const AdminUsers = () => {
     } finally {
       setDeletingUserIds((prev) => prev.filter((id) => id !== user._id));
     }
+  };
+
+  const handleDeleteSelectedUsers = async () => {
+    if (!selectedUserIds.length) return;
+
+    const selectedUsers = users.filter((user) => selectedUserIds.includes(user._id));
+    const confirmed = window.confirm(
+      `Delete ${selectedUsers.length} selected user(s)? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const targetIds = [...selectedUserIds];
+    setIsDeletingSelected(true);
+    setDeletingUserIds((prev) => Array.from(new Set([...prev, ...targetIds])));
+
+    const results = await Promise.allSettled(targetIds.map((id) => api.delete(`/users/${id}`)));
+
+    const successIds: string[] = [];
+    const failed: { id: string; message: string }[] = [];
+
+    results.forEach((result, index) => {
+      const id = targetIds[index];
+      if (result.status === "fulfilled") {
+        successIds.push(id);
+        return;
+      }
+      const message =
+        (result.reason as any)?.response?.data?.error ||
+        (result.reason as any)?.response?.data?.message ||
+        (result.reason as any)?.message ||
+        "Failed to delete user.";
+      failed.push({ id, message });
+    });
+
+    const hasUnauthorized = results.some(
+      (result) => result.status === "rejected" && (result.reason as any)?.response?.status === 401
+    );
+    if (hasUnauthorized) {
+      setDeletingUserIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+      setIsDeletingSelected(false);
+      authStorage.clearAll();
+      navigate("/login");
+      return;
+    }
+
+    if (successIds.length) {
+      setUsers((prev) => prev.filter((user) => !successIds.includes(user._id)));
+      setSelectedUserIds((prev) => prev.filter((id) => !successIds.includes(id)));
+
+      if (selectedUserId && successIds.includes(selectedUserId)) {
+        closeUserDetails();
+      }
+    }
+
+    if (failed.length) {
+      toast({
+        title: "Bulk delete completed with errors",
+        description: `${successIds.length} deleted, ${failed.length} failed. ${failed[0].message}`,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Users deleted",
+        description: `${successIds.length} user(s) removed.`,
+      });
+    }
+
+    setDeletingUserIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+    setIsDeletingSelected(false);
+  };
+
+  const visibleUserIds = useMemo(() => filteredUsers.map((user) => user._id), [filteredUsers]);
+  const allVisibleSelected =
+    visibleUserIds.length > 0 && visibleUserIds.every((id) => selectedUserIds.includes(id));
+
+  const toggleSelectUser = (userId: string, checked: boolean) => {
+    setSelectedUserIds((prev) =>
+      checked ? Array.from(new Set([...prev, userId])) : prev.filter((id) => id !== userId)
+    );
+  };
+
+  const toggleSelectVisible = (checked: boolean) => {
+    setSelectedUserIds((prev) => {
+      if (checked) {
+        return Array.from(new Set([...prev, ...visibleUserIds]));
+      }
+      return prev.filter((id) => !visibleUserIds.includes(id));
+    });
   };
 
   const userForDetails =
@@ -433,7 +529,17 @@ const AdminUsers = () => {
                 Search and filter across every user profile.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 justify-end">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteSelectedUsers}
+                disabled={!selectedUserIds.length || isDeletingSelected}
+              >
+                {isDeletingSelected
+                  ? "Deleting selected..."
+                  : `Delete selected (${selectedUserIds.length})`}
+              </Button>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -463,6 +569,14 @@ const AdminUsers = () => {
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    <th className="py-2 px-4 w-12">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all visible users"
+                        checked={allVisibleSelected}
+                        onChange={(event) => toggleSelectVisible(event.target.checked)}
+                      />
+                    </th>
                     <th className="py-2 px-4">Name</th>
                     <th className="py-2 px-4">Email</th>
                     <th className="py-2 px-4">Role</th>
@@ -474,8 +588,18 @@ const AdminUsers = () => {
                 <tbody>
                   {filteredUsers.map((user) => {
                     const isDeleting = deletingUserIds.includes(user._id);
+                    const isSelected = selectedUserIds.includes(user._id);
                     return (
                       <tr key={user._id} className="border-b border-border/50 hover:bg-muted/50">
+                        <td className="py-4 px-4">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${user.name}`}
+                            checked={isSelected}
+                            onChange={(event) => toggleSelectUser(user._id, event.target.checked)}
+                            disabled={isDeleting || isDeletingSelected}
+                          />
+                        </td>
                         <td className="py-4 px-4 font-medium">{user.name}</td>
                         <td className="py-4 px-4 text-muted-foreground">{user.email}</td>
                         <td className="py-4 px-4 capitalize">{user.role}</td>
@@ -497,7 +621,7 @@ const AdminUsers = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => openUserDetails(user._id)}
-                              disabled={isDeleting}
+                              disabled={isDeleting || isDeletingSelected}
                             >
                               View details
                             </Button>
@@ -505,7 +629,7 @@ const AdminUsers = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteUser(user)}
-                              disabled={isDeleting}
+                              disabled={isDeleting || isDeletingSelected}
                             >
                               {isDeleting ? "Deleting..." : "Delete"}
                             </Button>
