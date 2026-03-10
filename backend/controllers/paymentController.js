@@ -24,8 +24,12 @@ const getNotifyValue = (source, ...keys) => {
 };
 
 const normalizeNotifyPayload = (payload) => {
-  const source = payload?.biz_content && typeof payload.biz_content === "object"
-    ? payload.biz_content
+  const parsedBizContent =
+    typeof payload?.biz_content === "string"
+      ? parseStringPayload(payload.biz_content)
+      : payload?.biz_content;
+  const source = parsedBizContent && typeof parsedBizContent === "object"
+    ? { ...payload, ...parsedBizContent }
     : payload;
 
   return {
@@ -65,6 +69,39 @@ const normalizeNotifyPayload = (payload) => {
     appId: getNotifyValue(source, "appid", "appId"),
     merchCode: getNotifyValue(source, "merch_code", "merchCode"),
   };
+};
+
+const parseStringPayload = (value) => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return {};
+
+  // Handle x-www-form-urlencoded bodies delivered as raw text.
+  if (trimmed.includes("=") && !trimmed.startsWith("{")) {
+    const params = new URLSearchParams(trimmed);
+    const parsed = {};
+    for (const [key, val] of params.entries()) {
+      parsed[key] = val;
+    }
+    if (Object.keys(parsed).length) return parsed;
+  }
+
+  // Handle JSON payload bodies.
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch (error) {
+    // Ignore JSON parse errors and return empty object.
+  }
+
+  return {};
+};
+
+const coerceNotifyPayload = (payload) => {
+  if (!payload) return {};
+  if (typeof payload === "string") return parseStringPayload(payload);
+  if (Buffer.isBuffer(payload)) return parseStringPayload(payload.toString("utf8"));
+  if (typeof payload === "object") return payload;
+  return {};
 };
 
 const sanitizeTitle = (value) => {
@@ -214,9 +251,10 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
 });
 
 exports.telebirrNotify = asyncHandler(async (req, res) => {
-  console.log("[Telebirr] notify payload", req.body);
+  const requestPayload = coerceNotifyPayload(req.body);
+  console.log("[Telebirr] notify payload", requestPayload);
 
-  const notifyData = normalizeNotifyPayload(req.body || {});
+  const notifyData = normalizeNotifyPayload(requestPayload);
   const {
     merchOrderId,
     paymentOrderId,
