@@ -35,7 +35,7 @@ app.set('trust proxy', 1);
 
 // Body parser
 app.use(express.json());
-uuuuuuuuuuuuuapp.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.text({ type: ["text/plain", "text/*"] }));
 app.use(
   mongoSanitize({
