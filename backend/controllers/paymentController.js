@@ -104,6 +104,37 @@ const coerceNotifyPayload = (payload) => {
   return {};
 };
 
+const hasKeys = (value) =>
+  Boolean(value && typeof value === "object" && Object.keys(value).length);
+
+const parseParamsToObject = (paramsString) => {
+  const params = new URLSearchParams(paramsString);
+  const parsed = {};
+  for (const [key, value] of params.entries()) {
+    parsed[key] = value;
+  }
+  return parsed;
+};
+
+const parseNotifyParamsFromPath = (req) => {
+  const rawUrl = req.originalUrl || req.url || "";
+  const marker = "/telebirr/notify";
+  const idx = rawUrl.indexOf(marker);
+  if (idx === -1) return {};
+
+  const tail = rawUrl.slice(idx + marker.length);
+  if (!tail) return {};
+
+  if (tail.startsWith("&")) {
+    return parseParamsToObject(tail.slice(1));
+  }
+  if (tail.startsWith("?")) {
+    return parseParamsToObject(tail.slice(1));
+  }
+
+  return {};
+};
+
 const sanitizeTitle = (value) => {
   const raw = typeof value === "string" ? value : "";
   return raw.replace(/[~`!#$%^*()\-+=|/<>?;:"\[\]{}\\&]/g, " ").replace(/\s+/g, " ").trim();
@@ -251,7 +282,22 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
 });
 
 exports.telebirrNotify = asyncHandler(async (req, res) => {
-  const requestPayload = coerceNotifyPayload(req.body);
+  const bodyPayload = coerceNotifyPayload(req.body);
+  const queryPayload = coerceNotifyPayload(req.query);
+  const pathPayload = parseNotifyParamsFromPath(req);
+  const requestPayload = hasKeys(bodyPayload)
+    ? bodyPayload
+    : hasKeys(queryPayload)
+      ? queryPayload
+      : pathPayload;
+
+  console.log("[Telebirr] notify request", {
+    method: req.method,
+    contentType: req.headers["content-type"] || null,
+    hasBody: hasKeys(bodyPayload),
+    hasQuery: hasKeys(queryPayload),
+    hasPathParams: hasKeys(pathPayload),
+  });
   console.log("[Telebirr] notify payload", requestPayload);
 
   const notifyData = normalizeNotifyPayload(requestPayload);
