@@ -32,7 +32,15 @@ const normalizeNotifyPayload = (payload) => {
     : payload;
 
   return {
-    merchOrderId: getNotifyValue(source, "merch_order_id", "merchOrderId"),
+    merchOrderId: getNotifyValue(
+      source,
+      "merch_order_id",
+      "merchOrderId",
+      "merchant_order_id",
+      "merchantOrderId",
+      "out_trade_no",
+      "outTradeNo"
+    ),
     paymentOrderId: getNotifyValue(
       source,
       "payment_order_id",
@@ -303,7 +311,13 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
   const { merchOrderId, paymentOrderId, tradeStatus, orderStatus } = notifyData;
 
   if (!merchOrderId) {
-    console.warn("[Telebirr] Missing merchant order id in notify payload");
+    console.warn("[Telebirr] Missing merchant order id in notify payload", {
+      method: req.method,
+      url: req.originalUrl || req.url || null,
+      contentType: req.headers["content-type"] || null,
+      query: req.query || null,
+      body: req.body || null,
+    });
     return res.status(200).json({ success: false, message: "Missing order id" });
   }
 
