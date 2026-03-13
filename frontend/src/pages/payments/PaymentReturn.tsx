@@ -6,19 +6,50 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { ApiResponse, Enrollment } from "@/lib/types";
 
+const parseTelebirrReturnParams = () => {
+  if (typeof window === "undefined") {
+    return new URLSearchParams();
+  }
+
+  const rawSearch = window.location.search || "";
+  const normalizedSearch = rawSearch.startsWith("?")
+    ? `?${rawSearch.slice(1).replace(/\?/g, "&")}`
+    : rawSearch.replace(/\?/g, "&");
+
+  return new URLSearchParams(normalizedSearch);
+};
+
 const PaymentReturn = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<"pending" | "approved" | "failed">("pending");
   const [courseId, setCourseId] = useState<string | null>(null);
+  const [callbackForwarded, setCallbackForwarded] = useState(false);
 
   useEffect(() => {
     let active = true;
-    const course = searchParams.get("courseId");
+    const returnParams = parseTelebirrReturnParams();
+    const course = returnParams.get("courseId") || searchParams.get("courseId");
+    const merchOrderId = returnParams.get("merch_order_id");
+    const paymentOrderId = returnParams.get("payment_order_id");
+    const tradeStatus = returnParams.get("trade_status");
+    const orderStatus = returnParams.get("order_status");
     if (course) setCourseId(course);
 
     const check = async () => {
       try {
+        if (!callbackForwarded && merchOrderId && (tradeStatus || orderStatus)) {
+          await api.post("/payments/telebirr/notify", {
+            ...Object.fromEntries(returnParams.entries()),
+            merch_order_id: merchOrderId,
+            payment_order_id: paymentOrderId,
+            trade_status: tradeStatus,
+            order_status: orderStatus,
+          });
+          if (!active) return;
+          setCallbackForwarded(true);
+        }
+
         const res = await api.get<ApiResponse<Enrollment[]>>("/enrollments/me");
         if (!active) return;
         if (!course) {
@@ -47,7 +78,7 @@ const PaymentReturn = () => {
       active = false;
       clearInterval(interval);
     };
-  }, [searchParams]);
+  }, [searchParams, navigate, callbackForwarded]);
 
   return (
     <div className="min-h-screen bg-background">
