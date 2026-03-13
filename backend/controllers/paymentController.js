@@ -1,6 +1,7 @@
 const Course = require("../models/Course");
 const Enrollment = require("../models/Enrollment");
 const User = require("../models/User");
+const TelebirrCallbackLog = require("../models/TelebirrCallbackLog");
 const ErrorResponse = require("../utils/errorResponse");
 const asyncHandler = require("../middleware/async");
 const applyFabricToken = require("../service/applyFabricTokenService");
@@ -140,6 +141,46 @@ const parseNotifyParamsFromPath = (req) => {
   }
 
   return {};
+};
+
+const getPayloadSource = ({ bodyPayload, queryPayload, pathPayload }) => {
+  if (hasKeys(bodyPayload)) return "body";
+  if (hasKeys(queryPayload)) return "query";
+  if (hasKeys(pathPayload)) return "path";
+  return "empty";
+};
+
+const recordTelebirrCallback = async ({
+  req,
+  source,
+  bodyPayload,
+  queryPayload,
+  pathPayload,
+  requestPayload,
+  note,
+}) => {
+  try {
+    const normalized = normalizeNotifyPayload(requestPayload || {});
+    await TelebirrCallbackLog.create({
+      method: req.method,
+      url: req.originalUrl || req.url || "",
+      contentType: req.headers["content-type"] || "",
+      merchOrderId: normalized.merchOrderId,
+      paymentOrderId: normalized.paymentOrderId,
+      tradeStatus: normalized.tradeStatus,
+      orderStatus: normalized.orderStatus,
+      source,
+      rawBody: bodyPayload,
+      rawQuery: queryPayload,
+      rawPathParams: pathPayload,
+      parsedPayload: requestPayload,
+      note,
+    });
+  } catch (error) {
+    console.warn("[Telebirr] Failed to persist callback audit log", {
+      message: error.message,
+    });
+  }
 };
 
 const sanitizeTitle = (value) => {
@@ -292,6 +333,7 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
   const bodyPayload = coerceNotifyPayload(req.body);
   const queryPayload = coerceNotifyPayload(req.query);
   const pathPayload = parseNotifyParamsFromPath(req);
+  const source = getPayloadSource({ bodyPayload, queryPayload, pathPayload });
   const requestPayload = hasKeys(bodyPayload)
     ? bodyPayload
     : hasKeys(queryPayload)
@@ -307,10 +349,29 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
   });
   console.log("[Telebirr] notify payload", requestPayload);
 
+  await recordTelebirrCallback({
+    req,
+    source,
+    bodyPayload,
+    queryPayload,
+    pathPayload,
+    requestPayload,
+    note: "received",
+  });
+
   const notifyData = normalizeNotifyPayload(requestPayload);
   const { merchOrderId, paymentOrderId, tradeStatus, orderStatus } = notifyData;
 
   if (!merchOrderId) {
+    await recordTelebirrCallback({
+      req,
+      source,
+      bodyPayload,
+      queryPayload,
+      pathPayload,
+      requestPayload,
+      note: "missing merchant order id",
+    });
     console.warn("[Telebirr] Missing merchant order id in notify payload", {
       method: req.method,
       url: req.originalUrl || req.url || null,
@@ -323,6 +384,15 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
 
   const enrollment = await Enrollment.findOne({ merchOrderId });
   if (!enrollment) {
+    await recordTelebirrCallback({
+      req,
+      source,
+      bodyPayload,
+      queryPayload,
+      pathPayload,
+      requestPayload,
+      note: "enrollment not found",
+    });
     console.warn("[Telebirr] Enrollment not found for merchant order", { merchOrderId });
     return res.status(200).json({ success: false, message: "Enrollment not found" });
   }
@@ -344,6 +414,16 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
       paymentStatus: enrollment.paymentStatus,
     });
 
+    await recordTelebirrCallback({
+      req,
+      source,
+      bodyPayload,
+      queryPayload,
+      pathPayload,
+      requestPayload,
+      note: "payment confirmed",
+    });
+
     if (!wasApproved) {
       const course = await Course.findById(enrollment.course);
       if (course) {
@@ -361,6 +441,16 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
       tradeStatus: tradeStatus || null,
       orderStatus: orderStatus || null,
       paymentStatus: enrollment.paymentStatus,
+    });
+
+    await recordTelebirrCallback({
+      req,
+      source,
+      bodyPayload,
+      queryPayload,
+      pathPayload,
+      requestPayload,
+      note: "payment not completed",
     });
   }
 
