@@ -1,5 +1,5 @@
-import { BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
+import tesbinnLogo from "@/assets/TESBINN-logo.png";
 
 interface LogoProps {
   variant?: "light" | "dark" | "auto";
@@ -27,15 +27,19 @@ const Logo = ({ variant = "auto", size = "md", showText = true }: LogoProps) => 
   };
 
   const iconBgClasses = {
-    light: "bg-accent",
-    dark: "bg-primary",
-    auto: "bg-primary",
+    light: "bg-white",
+    dark: "bg-white",
+    auto: "bg-white",
   };
 
   return (
     <Link to="/" className="flex items-center gap-2 group">
       <div className={`${iconBgClasses[variant]} rounded-lg p-1.5 flex items-center justify-center`}>
-        <BookOpen className={`${sizeClasses[size]} ${variant === "light" ? "text-accent-foreground" : "text-primary-foreground"}`} />
+        <img
+          src={tesbinnLogo}
+          alt="TESBINN logo"
+          className={`${sizeClasses[size]} object-contain`}
+        />
       </div>
       {showText && (
         <span className={`font-bold ${textSizeClasses[size]} ${colorClasses[variant]} tracking-tight`}>

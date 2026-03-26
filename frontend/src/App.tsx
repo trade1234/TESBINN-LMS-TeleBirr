@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 import ScrollToTop from "./components/layout/ScrollToTop";
 
 // Pages
@@ -38,6 +38,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminApprovals from "./pages/admin/Approvals";
 import AdminUsers from "./pages/admin/Users";
 import AdminCourses from "./pages/admin/Courses";
+import AdminCoursePreview from "./pages/admin/CoursePreview";
 import AdminCategories from "./pages/admin/Categories";
 import AdminAnalytics from "./pages/admin/Analytics";
 import AdminSettings from "./pages/admin/Settings";
@@ -52,13 +53,14 @@ import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
 
 const queryClient = new QueryClient();
+const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <Router>
         <ScrollToTop />
         <Routes>
           {/* Public Routes */}
@@ -108,6 +110,7 @@ const App = () => (
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/approvals" element={<AdminApprovals />} />
           <Route path="/admin/courses" element={<AdminCourses />} />
+          <Route path="/admin/courses/:id" element={<AdminCoursePreview />} />
           <Route path="/admin/categories" element={<AdminCategories />} />
           <Route path="/admin/adverts" element={<AdminAdverts />} />
           <Route path="/admin/announcements" element={<AdminAnnouncements />} />
@@ -121,7 +124,7 @@ const App = () => (
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
+      </Router>
     </TooltipProvider>
   </QueryClientProvider>
 );

@@ -228,8 +228,10 @@ const Landing = () => {
                   <Link to="/schedule">View Class Schedule</Link>
                 </Button>
                 <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <a href="sms:9295?body=OK">
                   <Smartphone className="mr-2 h-4 w-4" />
                   Send SMS ON 9295 
+                  </a>
                 </Button>
               </div>
             </div>

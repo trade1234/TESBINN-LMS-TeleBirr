@@ -97,6 +97,8 @@ const TeacherModules = () => {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [lessonQueue, setLessonQueue] = useState<any[]>([]);
+  const [queueSaving, setQueueSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -414,7 +416,7 @@ const TeacherModules = () => {
     }
   };
 
-  const handleLessonSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleAddToQueue = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedCourse || !lessonForm.moduleId) {
       toast({ title: "Select module", variant: "destructive" });
@@ -452,48 +454,32 @@ const TeacherModules = () => {
       return;
     }
 
-    setLessonSaving(true);
-    try {
-      const payload: Record<string, unknown> = {
-        courseId: selectedCourse._id,
-        moduleId: lessonForm.moduleId,
-        title: lessonForm.title.trim(),
-        description: lessonForm.description.trim(),
-        lessonType: lessonForm.lessonType,
-        order: Number(lessonForm.order) || undefined,
-      };
+    const payload: Record<string, unknown> = {
+      courseId: selectedCourse._id,
+      moduleId: lessonForm.moduleId,
+      title: lessonForm.title.trim(),
+      description: lessonForm.description.trim(),
+      lessonType: lessonForm.lessonType,
+      order: Number(lessonForm.order) || undefined,
+    };
 
-      if (lessonForm.lessonType === "video") {
-        payload.duration = Number(lessonForm.duration);
-        payload.videoUrl = lessonForm.videoUrl.trim();
-      }
+    if (lessonForm.lessonType === "video") {
+      payload.duration = Number(lessonForm.duration);
+      payload.videoUrl = lessonForm.videoUrl.trim();
+    }
 
-      if (lessonForm.lessonType === "text") {
-        payload.content = lessonForm.content.trim();
-      }
+    if (lessonForm.lessonType === "text") {
+      payload.content = lessonForm.content.trim();
+    }
 
-      if (lessonForm.lessonType === "pdf") {
-        payload.documentUrl = lessonForm.documentUrl.trim();
-      }
-      if (lessonForm.lessonType === "image") {
-        payload.imageUrl = lessonForm.imageUrl.trim();
-      }
+    if (lessonForm.lessonType === "pdf") {
+      payload.documentUrl = lessonForm.documentUrl.trim();
+    }
+    if (lessonForm.lessonType === "image") {
+      payload.imageUrl = lessonForm.imageUrl.trim();
+    }
 
-      const res = await api.post("/lessons", payload);
-      setCourses((prev) =>
-        prev.map((course) =>
-          course._id === selectedCourse._id
-            ? {
-                ...course,
-                modules: course.modules.map((module) =>
-                  module._id === lessonForm.moduleId
-                    ? { ...module, lessons: [...(module.lessons || []), res.data.data] }
-                    : module,
-                ),
-              }
-            : course,
-        ),
-      );
+    setLessonQueue((prev) => [...prev, payload]);
     setLessonForm((prev) => ({
       ...prev,
       title: "",
@@ -505,14 +491,107 @@ const TeacherModules = () => {
       documentUrl: "",
       imageUrl: "",
     }));
-      toast({ title: "Lesson created" });
+    toast({ title: "Added lesson to queue" });
+  };
+
+  const handleSaveQueue = async () => {
+    if (lessonQueue.length === 0) return;
+    setQueueSaving(true);
+    let successCount = 0;
+    
+    let updatedCourses = [...courses];
+    
+    try {
+      for (let i = 0; i < lessonQueue.length; i++) {
+        const draft = lessonQueue[i];
+        const payload: Record<string, unknown> = {
+          courseId: draft.courseId,
+          moduleId: draft.moduleId,
+          title: draft.title?.trim() || 'Untitled',
+          description: draft.description?.trim() || 'No description',
+          lessonType: draft.lessonType,
+          order: draft.order,
+        };
+
+        let fileUrl = "";
+        if (draft.file) {
+          const formData = new FormData();
+          formData.append("file", draft.file);
+          const uploadRes = await api.post("/files/appwrite", formData);
+          fileUrl = uploadRes.data?.data?.viewUrl || uploadRes.data?.data?.url || uploadRes.data?.data?.downloadUrl || uploadRes.data?.data?.fileUrl;
+        }
+
+        if (draft.lessonType === "video") {
+          payload.duration = Number(draft.duration) || 0;
+          payload.videoUrl = draft.file ? fileUrl : (draft.videoUrl || "");
+        } else if (draft.lessonType === "text") {
+          payload.content = draft.content || "";
+        } else if (draft.lessonType === "pdf") {
+          payload.documentUrl = draft.file ? fileUrl : (draft.documentUrl || "");
+        } else if (draft.lessonType === "image") {
+          payload.imageUrl = draft.file ? fileUrl : (draft.imageUrl || "");
+        }
+
+        const res = await api.post("/lessons", payload);
+        successCount++;
+        updatedCourses = updatedCourses.map((course) =>
+          course._id === payload.courseId
+            ? {
+                ...course,
+                modules: course.modules?.map((module) =>
+                  module._id === payload.moduleId
+                    ? { ...module, lessons: [...(module.lessons || []), res.data.data] }
+                    : module,
+                ),
+              }
+            : course,
+        );
+      }
+      setCourses(updatedCourses);
+      setLessonQueue([]);
+      toast({ title: `Successfully saved ${successCount} lessons!` });
     } catch (err: any) {
       const message =
-        err?.response?.data?.error || err?.response?.data?.message || "Unable to create lesson.";
-      toast({ title: "Lesson error", description: message, variant: "destructive" });
+        err?.response?.data?.error || err?.response?.data?.message || "Error saving lessons.";
+      setCourses(updatedCourses);
+      setLessonQueue((prev) => prev.slice(successCount));
+      toast({ title: "Bulk save error", description: message, variant: "destructive" });
     } finally {
-      setLessonSaving(false);
+      setQueueSaving(false);
     }
+  };
+
+  const handleBulkFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    if (!selectedCourse || !lessonForm.moduleId) {
+      toast({ title: "Select a module first in 'Add new lesson'", variant: "destructive" });
+      return;
+    }
+
+    const newDrafts = files.map((file, idx) => {
+      let type = "text";
+      if (file.type.startsWith("video/")) type = "video";
+      else if (file.type.startsWith("image/")) type = "image";
+      else if (file.type === "application/pdf") type = "pdf";
+
+      return {
+        id: Math.random().toString(36).slice(2),
+        file,
+        courseId: selectedCourse._id,
+        moduleId: lessonForm.moduleId,
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        description: "",
+        lessonType: type,
+        order: lessonQueue.length + idx + 1,
+        duration: "",
+      };
+    });
+
+    setLessonQueue((prev) => [...prev, ...newDrafts]);
+    event.target.value = "";
+    toast({ title: `Added ${files.length} files to queue` });
   };
 
   const uploadTargetField: "videoUrl" | "documentUrl" | "imageUrl" | null =
@@ -874,7 +953,8 @@ const TeacherModules = () => {
               </Button>
             </form>
 
-            <form onSubmit={handleLessonSubmit} className="space-y-3">
+            <div className="space-y-6">
+            <form onSubmit={handleAddToQueue} className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold">Add new lesson</p>
                 <span className="text-xs text-muted-foreground">
@@ -1046,10 +1126,109 @@ const TeacherModules = () => {
                   File uploads are only supported for Video, PDF, or Image lessons.
                 </p>
               )}
-              <Button type="submit" disabled={lessonSaving}>
-                {lessonSaving ? "Saving..." : "Save lesson"}
+              <Button type="submit" variant="outline" className="w-full">
+                Add to Bulk Save Queue
               </Button>
             </form>
+
+            <div className="flex items-center justify-between mt-6">
+              <p className="text-sm font-semibold">Or bulk import files</p>
+            </div>
+            <Input type="file" multiple accept="video/*,image/*,.pdf" onChange={handleBulkFilesChange} className="cursor-pointer" />
+
+            {lessonQueue.length > 0 && (
+              <div className="rounded-xl border border-warning/50 bg-warning/5 p-4 space-y-3 mt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-warning-foreground">
+                    Lessons in Queue ({lessonQueue.length})
+                  </p>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setLessonQueue([])}
+                    disabled={queueSaving}
+                    type="button"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                  {lessonQueue.map((lesson, idx) => (
+                    <div key={lesson.id || idx} className="flex flex-col gap-3 text-sm bg-background/80 rounded border p-4 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{lesson.file ? lesson.file.name : "Manual Form Entry"}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="xs" 
+                          onClick={() => setLessonQueue(prev => prev.filter((_, i) => i !== idx))} 
+                          className="text-destructive h-auto py-1"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Title</Label>
+                          <Input value={lesson.title} onChange={(e) => {
+                            const val = e.target.value;
+                            setLessonQueue(prev => prev.map((l, i) => i === idx ? { ...l, title: val } : l));
+                          }} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Type</Label>
+                          <Select value={lesson.lessonType} onValueChange={(val) => {
+                            setLessonQueue(prev => prev.map((l, i) => i === idx ? { ...l, lessonType: val } : l));
+                          }}>
+                            <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="video">Video</SelectItem>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="pdf">PDF</SelectItem>
+                              <SelectItem value="image">Image</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Order</Label>
+                          <Input type="number" value={lesson.order} onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setLessonQueue(prev => prev.map((l, i) => i === idx ? { ...l, order: val } : l));
+                          }} />
+                        </div>
+                        {lesson.lessonType === "video" && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Duration (min)</Label>
+                            <Input type="number" value={lesson.duration || ""} onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setLessonQueue(prev => prev.map((l, i) => i === idx ? { ...l, duration: val } : l));
+                            }} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Description</Label>
+                        <Textarea rows={2} value={lesson.description} onChange={(e) => {
+                          const val = e.target.value;
+                          setLessonQueue(prev => prev.map((l, i) => i === idx ? { ...l, description: val } : l));
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button 
+                  onClick={handleSaveQueue} 
+                  disabled={queueSaving} 
+                  className="w-full text-white mt-2"
+                  variant="default"
+                  type="button"
+                >
+                  {queueSaving ? "Saving All... (Uploads may take time)" : `Save ${lessonQueue.length} lessons to Module`}
+                </Button>
+              </div>
+            )}
+            </div>
           </div>
 
           <div>

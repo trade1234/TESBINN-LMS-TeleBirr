@@ -298,6 +298,13 @@ const AdminCourses = () => {
           <div className="flex justify-end gap-2">
             <Button
               size="sm"
+              variant="default"
+              asChild
+            >
+              <Link to={`/admin/courses/${course._id}`}>Review</Link>
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               disabled={isProcessing || status.label === "Approved"}
               onClick={() => handleCourseAction(course, "approve")}

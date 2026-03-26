@@ -1,0 +1,8 @@
+{
+  "projectType": "h5",
+  "buildType": true,
+  "buildScript": "npm run build:mini",
+  "buildDirectory": "dist",
+  "appHomePage": "index.html",
+  "appId": "REPLACE_WITH_TELEBIRR_MINI_APP_ID"
+}

@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
+    base: env.VITE_BUILD_BASE || "/",
     server: {
       host: "::",
       port: 8080,
