@@ -229,8 +229,8 @@ const Landing = () => {
                 </Button>
                 <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   <a href="sms:9295?body=OK">
-                  <Smartphone className="mr-2 h-4 w-4" />
-                  Send SMS ON 9295 
+                    <Smartphone className="mr-2 h-4 w-4" />
+                    Send SMS ON 9295
                   </a>
                 </Button>
               </div>
@@ -274,27 +274,23 @@ const Landing = () => {
               <Link
                 key={training.label}
                 to={training.href}
-                className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
-                  training.highlighted
+                className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${training.highlighted
                     ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90 hover:shadow-md"
                     : "bg-background border-border hover:border-primary/50 hover:shadow-md"
-                }`}
+                  }`}
               >
                 <div
-                  className={`p-2 rounded-lg ${
-                    training.highlighted ? "bg-primary-foreground/20" : "bg-primary/10"
-                  }`}
+                  className={`p-2 rounded-lg ${training.highlighted ? "bg-primary-foreground/20" : "bg-primary/10"
+                    }`}
                 >
                   <training.icon
-                    className={`h-5 w-5 ${
-                      training.highlighted ? "text-primary-foreground" : "text-primary"
-                    }`}
+                    className={`h-5 w-5 ${training.highlighted ? "text-primary-foreground" : "text-primary"
+                      }`}
                   />
                 </div>
                 <span
-                  className={`text-sm font-medium ${
-                    training.highlighted ? "text-primary-foreground" : "text-foreground"
-                  }`}
+                  className={`text-sm font-medium ${training.highlighted ? "text-primary-foreground" : "text-foreground"
+                    }`}
                 >
                   {training.label}
                 </span>
@@ -485,7 +481,7 @@ const Landing = () => {
           </div>
           <Button className="bg-secondary hover:bg-secondary/90 text-primary-foreground px-8" asChild>
             <a href="sms:9295?body=OK">
-              SMS ON 9295 
+              SMS ON 9295
               <ChevronDown className="ml-2 h-4 w-4" />
             </a>
           </Button>

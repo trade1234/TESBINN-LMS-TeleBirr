@@ -47,10 +47,15 @@ app.use(
 const defaultOrigins = [
   'https://tesbinn.com',   
   'https://www.tesbinn.com',
-  'http://tesbinn.com',       
+  'http://tesbinn.com',
+  'https://tesbinn.com',      
   'https://tesbinn-lms-frontend.vercel.app',
+  'http://localhost:8080',
   'http://localhost:8081',
   'http://localhost:8082',                                
+  'http://127.0.0.1:8080',
+  'http://127.0.0.1:8081',
+  'http://127.0.0.1:8082',
   'http://172.16.0.2:8081',
   'http://172.16.0.2:8082',
   'http://44.209.130.119',
@@ -58,6 +63,7 @@ const defaultOrigins = [
 ];
 const envOrigins = [process.env.ALLOWED_ORIGINS, process.env.FRONTEND_URL].filter(Boolean);
 const allowedOriginsString = [defaultOrigins.join(','), ...envOrigins].join(',');
+const allowNullOrigin = process.env.ALLOW_NULL_ORIGIN !== 'false';
 const normalizeOrigin = (value) => {
   if (!value) return '';
   try {
@@ -71,6 +77,9 @@ const allowedOrigins = allowedOriginsString
   .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
+const isLocalSimulatorOrigin = (origin) =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -78,11 +87,16 @@ app.use(
         callback(null, true);
         return;
       }
-      const normalizedOrigin = normalizeOrigin(origin);
-      if (allowedOrigins.includes(normalizedOrigin)) {
+      if (origin === 'null' && allowNullOrigin) {
         callback(null, true);
         return;
       }
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (allowedOrigins.includes(normalizedOrigin) || isLocalSimulatorOrigin(normalizedOrigin)) {
+        callback(null, true);
+        return;
+      }
+      console.warn('[CORS] Blocked origin', { origin, normalizedOrigin });
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
@@ -96,7 +110,11 @@ app.use(
 // connection errors become a normal JSON 500 response.
 app.use(async (req, res, next) => {
   // Allow basic health checks without DB.
-  if (req.path === '/api/v1/health' || req.path === '/health') {
+  if (
+    req.path === '/api/v1/health' ||
+    req.path === '/health' ||
+    req.path.startsWith('/api/v1/youtube')
+  ) {
     next();
     return;
   }

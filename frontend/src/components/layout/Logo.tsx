@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import tesbinnLogo from "@/assets/TESBINN-logo.png";
+import tesbinnLogo from "@/assets/TESBINN-logo.jpg";
 
 interface LogoProps {
   variant?: "light" | "dark" | "auto";
