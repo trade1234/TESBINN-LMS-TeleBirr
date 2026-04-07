@@ -6,6 +6,7 @@ const ErrorResponse = require("../utils/errorResponse");
 const asyncHandler = require("../middleware/async");
 const applyFabricToken = require("../service/applyFabricTokenService");
 const orderService = require("../service/requestCreateOrderService");
+const telebirrConfigModule = require("../service/config");
 
 const createMerchantOrderId = () =>
   `ENR${Date.now()}${Math.floor(Math.random() * 10000)}`;
@@ -189,23 +190,19 @@ const sanitizeTitle = (value) => {
 };
 
 exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
-  const { courseId } = req.body;
+  const { courseId, channel: requestedChannel } = req.body;
   if (!courseId) {
     return next(new ErrorResponse("courseId is required", 400));
   }
 
-  const requiredEnv = [
-    "TELEBIRR_BASE_URL",
-    "TELEBIRR_WEB_BASE_URL",
-    "TELEBIRR_FABRIC_APP_ID",
-    "TELEBIRR_APP_SECRET",
-    "TELEBIRR_MERCHANT_APP_ID",
-    "TELEBIRR_MERCHANT_CODE",
-    "TELEBIRR_PRIVATE_KEY",
-  ];
-  const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+  const channel = telebirrConfigModule.getChannel(
+    requestedChannel || req.headers["x-telebirr-channel"]
+  );
+  const telebirrConfig = telebirrConfigModule.resolveChannelConfig(channel);
+  const missingEnv = telebirrConfig.missingEnv;
   const fallbackCheckoutUrl = process.env.TELEBIRR_FALLBACK_CHECKOUT_URL;
   const allowFallback = Boolean(fallbackCheckoutUrl) && process.env.NODE_ENV !== "production";
+  const isMiniMode = telebirrConfig.channel === "mini" || telebirrConfig.tradeType === "InApp";
 
   const course = await Course.findById(courseId);
   if (!course || !course.isPublished || !course.isApproved) {
@@ -254,6 +251,7 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
         success: true,
         data: {
           checkoutUrl: fallbackCheckoutUrl,
+          rawRequest: null,
           merchOrderId,
           prepayId: null,
           isFallback: true,
@@ -282,7 +280,8 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
       amount.toFixed(2),
       merchOrderId,
       redirectUrl,
-      payerPhone
+      payerPhone,
+      telebirrConfig
     );
   } catch (err) {
     const message = err?.message || "Telebirr request failed";
@@ -291,6 +290,7 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
         success: true,
         data: {
           checkoutUrl: fallbackCheckoutUrl,
+          rawRequest: null,
           merchOrderId,
           prepayId: null,
           isFallback: true,
@@ -310,10 +310,14 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse("Missing prepay id from payment provider", 400));
   }
 
-  const checkoutUrl = orderService.createCheckoutUrl(prepayId);
+  const rawRequest = orderService.createRawRequest(prepayId, telebirrConfig);
+  const checkoutUrl = orderService.createCheckoutUrl(prepayId, telebirrConfig);
   console.log(`[Telebirr] Checkout URL: ${checkoutUrl}`);
   console.log("[Telebirr] create-order response", {
+    channel: telebirrConfig.channel,
+    tradeType: telebirrConfig.tradeType,
     checkoutUrl,
+    rawRequest,
     merchOrderId,
     prepayId,
   });
@@ -321,7 +325,8 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: {
-      checkoutUrl,
+      checkoutUrl: isMiniMode ? null : checkoutUrl,
+      rawRequest: isMiniMode ? rawRequest : null,
       merchOrderId,
       prepayId,
       prepay_id: prepayId,

@@ -1,7 +1,7 @@
 const applyFabricToken = require("./applyFabricTokenService");
 const https = require("https");
 const tools = require("../utils/telebirrTools");
-const config = require("./config");
+const configModule = require("./config");
 
 const logJson = (label, value) => {
   const payload = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -68,9 +68,12 @@ exports.requestCreateOrder = async (
   amount,
   merchOrderId,
   redirectUrl,
-  payerPhone
+  payerPhone,
+  configOverride
 ) => {
+  const config = configOverride || configModule;
   const reqObject = createRequestObject(
+    config,
     title,
     amount,
     merchOrderId,
@@ -84,7 +87,7 @@ exports.requestCreateOrder = async (
   );
 };
 
-function createRequestObject(title, amount, merchOrderId, redirectUrl, payerPhone) {
+function createRequestObject(config, title, amount, merchOrderId, redirectUrl, payerPhone) {
   let req = {
     timestamp: tools.createTimeStamp(),
     nonce_str: tools.createNonceStr(),
@@ -118,7 +121,8 @@ function createRequestObject(title, amount, merchOrderId, redirectUrl, payerPhon
   return req;
 }
 
-function createRawRequest(prepayId) {
+function createRawRequest(prepayId, configOverride) {
+  const config = configOverride || configModule;
   const map = {
     appid: config.merchantAppId,
     merch_code: config.merchantCode,
@@ -139,8 +143,9 @@ function createRawRequest(prepayId) {
   return params.toString();
 }
 
-function createCheckoutUrl(prepayId) {
-  const rawRequest = createRawRequest(prepayId);
+function createCheckoutUrl(prepayId, configOverride) {
+  const config = configOverride || configModule;
+  const rawRequest = createRawRequest(prepayId, config);
   const base = config.webBaseUrl || "";
   const separator = base.includes("?")
     ? base.endsWith("?") || base.endsWith("&")
@@ -158,5 +163,6 @@ function createCheckoutUrl(prepayId) {
 
 module.exports = {
   requestCreateOrder: exports.requestCreateOrder,
+  createRawRequest,
   createCheckoutUrl,
 };

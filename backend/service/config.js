@@ -1,22 +1,9 @@
 const fs = require("fs");
 
-// NOTE:
-// Do not throw at module-load time. This module is imported by payment services,
-// and those services are imported during app startup because routes are mounted.
-// In serverless (Vercel), throwing here crashes the whole function even if you
-// never call Telebirr endpoints. Validate env at the moment you actually use it.
-const requiredEnv = [
-  "TELEBIRR_BASE_URL",
-  "TELEBIRR_WEB_BASE_URL",
-  "TELEBIRR_FABRIC_APP_ID",
-  "TELEBIRR_APP_SECRET",
-  "TELEBIRR_MERCHANT_APP_ID",
-  "TELEBIRR_MERCHANT_CODE",
-  "TELEBIRR_PRIVATE_KEY",
-];
-const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+const VALID_CHANNELS = ["h5", "mini"];
 
 const normalizeKey = (value) => (value ? value.replace(/\\n/g, "\n") : value);
+
 const loadCaCert = () => {
   const caPath = process.env.TELEBIRR_CA_CERT_PATH;
   if (!caPath) return undefined;
@@ -29,32 +16,89 @@ const loadCaCert = () => {
     return undefined;
   }
 };
+
 const caCert = loadCaCert();
 
+const getChannel = (value) => {
+  const normalized = String(value || process.env.TELEBIRR_DEFAULT_MODE || "h5").toLowerCase();
+  return VALID_CHANNELS.includes(normalized) ? normalized : "h5";
+};
+
+const readChannelValue = (channel, suffix, fallbackKey) => {
+  const prefix = channel === "mini" ? "TELEBIRR_MINI_" : "TELEBIRR_H5_";
+  return process.env[`${prefix}${suffix}`] || (fallbackKey ? process.env[fallbackKey] : undefined);
+};
+
+const resolveChannelConfig = (channelInput) => {
+  const channel = getChannel(channelInput);
+  const baseUrl = readChannelValue(channel, "BASE_URL", "TELEBIRR_BASE_URL");
+  const webBaseUrl = readChannelValue(channel, "WEB_BASE_URL", "TELEBIRR_WEB_BASE_URL");
+  const fabricAppId = process.env.TELEBIRR_FABRIC_APP_ID;
+  const appSecret = process.env.TELEBIRR_APP_SECRET;
+  const merchantAppId = readChannelValue(channel, "MERCHANT_APP_ID", "TELEBIRR_MERCHANT_APP_ID");
+  const merchantCode = process.env.TELEBIRR_MERCHANT_CODE;
+  const privateKey = normalizeKey(
+    readChannelValue(channel, "PRIVATE_KEY", "TELEBIRR_PRIVATE_KEY")
+  );
+  const tradeType =
+    process.env[`TELEBIRR_${channel.toUpperCase()}_TRADE_TYPE`] ||
+    process.env.TELEBIRR_TRADE_TYPE ||
+    (channel === "mini" ? "InApp" : "Checkout");
+  const includeRedirect =
+    process.env.TELEBIRR_INCLUDE_REDIRECT === "true" || tradeType !== "InApp";
+  const otherParams =
+    process.env[`TELEBIRR_${channel.toUpperCase()}_OTHER_PARAMS`] ||
+    process.env.TELEBIRR_OTHER_PARAMS ||
+    (tradeType === "InApp" ? "" : "&version=1.0&trade_type=Checkout");
+
+  const requiredEnv = [
+    ["TELEBIRR_BASE_URL", baseUrl],
+    ["TELEBIRR_FABRIC_APP_ID", fabricAppId],
+    ["TELEBIRR_APP_SECRET", appSecret],
+    ["TELEBIRR_MERCHANT_APP_ID", merchantAppId],
+    ["TELEBIRR_MERCHANT_CODE", merchantCode],
+    ["TELEBIRR_PRIVATE_KEY", privateKey],
+  ];
+
+  if (tradeType !== "InApp") {
+    requiredEnv.push(["TELEBIRR_WEB_BASE_URL", webBaseUrl]);
+  }
+
+  return {
+    channel,
+    missingEnv: requiredEnv.filter(([, value]) => !value).map(([key]) => key),
+    baseUrl,
+    webBaseUrl,
+    otherParams,
+    fabricAppId,
+    appSecret,
+    merchantAppId,
+    merchantCode,
+    notifyUrl: process.env.TELEBIRR_NOTIFY_URL,
+    redirectUrl: process.env.TELEBIRR_REDIRECT_URL,
+    tradeType,
+    businessType: process.env.TELEBIRR_BUSINESS_TYPE || "BuyGoods",
+    transCurrency: process.env.TELEBIRR_TRANS_CURRENCY || "ETB",
+    timeoutExpress: (() => {
+      const value = process.env.TELEBIRR_TIMEOUT_EXPRESS;
+      if (!value) return "120m";
+      return /^\d+m$/.test(value.trim()) ? value.trim() : "120m";
+    })(),
+    payeeIdentifierType: process.env.TELEBIRR_PAYEE_IDENTIFIER_TYPE || "04",
+    payeeType: process.env.TELEBIRR_PAYEE_TYPE || "5000",
+    includeRedirect,
+    includeCallbackInfo: process.env.TELEBIRR_INCLUDE_CALLBACK_INFO === "true",
+    privateKey,
+    rejectUnauthorized: process.env.TELEBIRR_REJECT_UNAUTHORIZED !== "false",
+    caCert,
+  };
+};
+
+const defaultConfig = resolveChannelConfig();
+
 module.exports = {
-  missingEnv,
-  baseUrl: process.env.TELEBIRR_BASE_URL,
-  webBaseUrl: process.env.TELEBIRR_WEB_BASE_URL,
-  otherParams: process.env.TELEBIRR_OTHER_PARAMS || "&version=1.0&trade_type=Checkout",
-  fabricAppId: process.env.TELEBIRR_FABRIC_APP_ID,
-  appSecret: process.env.TELEBIRR_APP_SECRET,
-  merchantAppId: process.env.TELEBIRR_MERCHANT_APP_ID,
-  merchantCode: process.env.TELEBIRR_MERCHANT_CODE,
-  notifyUrl: process.env.TELEBIRR_NOTIFY_URL,
-  redirectUrl: process.env.TELEBIRR_REDIRECT_URL,
-  tradeType: process.env.TELEBIRR_TRADE_TYPE || "Checkout",
-  businessType: process.env.TELEBIRR_BUSINESS_TYPE || "BuyGoods",
-  transCurrency: process.env.TELEBIRR_TRANS_CURRENCY || "ETB",
-  timeoutExpress: (() => {
-    const value = process.env.TELEBIRR_TIMEOUT_EXPRESS;
-    if (!value) return "120m";
-    return /^\d+m$/.test(value.trim()) ? value.trim() : "120m";
-  })(),
-  payeeIdentifierType: process.env.TELEBIRR_PAYEE_IDENTIFIER_TYPE || "04",
-  payeeType: process.env.TELEBIRR_PAYEE_TYPE || "5000",
-  includeRedirect: process.env.TELEBIRR_INCLUDE_REDIRECT === "true",
-  includeCallbackInfo: process.env.TELEBIRR_INCLUDE_CALLBACK_INFO === "true",
-  privateKey: normalizeKey(process.env.TELEBIRR_PRIVATE_KEY),
-  rejectUnauthorized: process.env.TELEBIRR_REJECT_UNAUTHORIZED !== "false",
-  caCert,
+  ...defaultConfig,
+  VALID_CHANNELS,
+  getChannel,
+  resolveChannelConfig,
 };
