@@ -268,7 +268,7 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
 
   let createOrderResult;
   try {
-    const tokenResult = await applyFabricToken();
+    const tokenResult = await applyFabricToken(telebirrConfig);
     const fabricToken = tokenResult.token;
     const redirectUrl = courseId
       ? `${process.env.TELEBIRR_REDIRECT_URL}?courseId=${courseId}`

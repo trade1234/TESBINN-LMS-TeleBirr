@@ -8,8 +8,9 @@ const logJson = (label, value) => {
   console.log(`[Telebirr] ${label}: ${payload}`);
 };
 
-const postJson = (url, headers, body) =>
+const postJson = (url, headers, body, configOverride) =>
   new Promise((resolve, reject) => {
+    const config = configOverride || configModule;
     const data = JSON.stringify(body);
     const parsed = new URL(url);
 
@@ -83,7 +84,8 @@ exports.requestCreateOrder = async (
   return postJson(
     `${config.baseUrl}/payment/v1/merchant/preOrder`,
     { "X-APP-Key": config.fabricAppId, Authorization: fabricToken },
-    reqObject
+    reqObject,
+    config
   );
 };
 

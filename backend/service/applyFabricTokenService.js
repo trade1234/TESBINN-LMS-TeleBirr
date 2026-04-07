@@ -1,8 +1,9 @@
 const https = require("https");
-const config = require("./config");
+const configModule = require("./config");
 
-const postJson = (url, headers, body) =>
+const postJson = (url, headers, body, configOverride) =>
   new Promise((resolve, reject) => {
+    const config = configOverride || configModule;
     const data = JSON.stringify(body);
     const parsed = new URL(url);
 
@@ -48,11 +49,13 @@ const postJson = (url, headers, body) =>
     req.end();
   });
 
-function applyFabricToken() {
+ function applyFabricToken(configOverride) {
+  const config = configOverride || configModule;
   return postJson(
     `${config.baseUrl}/payment/v1/token`,
     { "X-APP-Key": config.fabricAppId },
-    { appSecret: config.appSecret }
+    { appSecret: config.appSecret },
+    config
   );
 }
 
