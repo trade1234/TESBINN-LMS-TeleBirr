@@ -6,6 +6,27 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { ApiResponse, Course } from "@/lib/types";
 
+type TelebirrCreateOrderData = {
+  checkoutUrl?: string;
+  rawRequest?: string;
+  merchOrderId?: string;
+};
+
+type MiniAppBridge = {
+  startPay?: (options: {
+    rawRequest: string;
+    success?: (result: { resultCode?: string }) => void;
+    fail?: (error: { message?: string; errorMessage?: string }) => void;
+  }) => void;
+};
+
+const telebirrChannel = (import.meta.env.VITE_TELEBIRR_CHANNEL || "h5").toLowerCase();
+
+const getMiniAppBridge = (): MiniAppBridge | null => {
+  if (typeof window === "undefined") return null;
+  return (window as Window & { ma?: MiniAppBridge }).ma || null;
+};
+
 const Checkout = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -13,7 +34,10 @@ const Checkout = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [rawRequest, setRawRequest] = useState<string | null>(null);
+  const [merchOrderId, setMerchOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isMiniChannel = telebirrChannel === "mini";
 
   useEffect(() => {
     let active = true;
@@ -25,14 +49,22 @@ const Checkout = () => {
       try {
         const [courseRes, checkoutRes] = await Promise.all([
           api.get<ApiResponse<Course>>(`/courses/${courseId}`),
-          api.post<ApiResponse<{ checkoutUrl: string }>>("/payments/telebirr/create-order", {
+          api.post<ApiResponse<TelebirrCreateOrderData>>("/payments/telebirr/create-order", {
             courseId,
+            channel: telebirrChannel,
           }),
         ]);
         if (!active) return;
+        const orderData = checkoutRes.data?.data || {};
         setCourse(courseRes.data.data);
-        setCheckoutUrl(checkoutRes.data?.data?.checkoutUrl || null);
-        if (!checkoutRes.data?.data?.checkoutUrl) {
+        setCheckoutUrl(orderData.checkoutUrl || null);
+        setRawRequest(orderData.rawRequest || null);
+        setMerchOrderId(orderData.merchOrderId || null);
+        if (isMiniChannel) {
+          if (!orderData.rawRequest) {
+            setError("Unable to start mini app payment. Please try again.");
+          }
+        } else if (!orderData.checkoutUrl) {
           setError("Unable to start payment. Please try again.");
         }
       } catch (err: any) {
@@ -52,7 +84,52 @@ const Checkout = () => {
     return () => {
       active = false;
     };
-  }, [courseId]);
+  }, [courseId, isMiniChannel]);
+
+  const handleProceed = () => {
+    setError(null);
+
+    if (isMiniChannel) {
+      const bridge = getMiniAppBridge();
+      if (!rawRequest) {
+        setError("Mini app payment is unavailable because rawRequest was not returned.");
+        return;
+      }
+      if (!bridge?.startPay) {
+        setError("Mini app payment bridge is not available in this runtime.");
+        return;
+      }
+
+      setIsRedirecting(true);
+      bridge.startPay({
+        rawRequest: rawRequest.trim(),
+        success: (result) => {
+          if (result?.resultCode === "1") {
+            navigate(
+              `/payment/return?courseId=${encodeURIComponent(courseId || "")}${merchOrderId ? `&merch_order_id=${encodeURIComponent(merchOrderId)}` : ""}`
+            );
+            return;
+          }
+
+          setIsRedirecting(false);
+          setError("Mini app payment was cancelled or did not complete.");
+        },
+        fail: (tradeError) => {
+          const message =
+            tradeError?.message ||
+            tradeError?.errorMessage ||
+            "Mini app payment failed.";
+          setIsRedirecting(false);
+          setError(message);
+        },
+      });
+      return;
+    }
+
+    if (!checkoutUrl) return;
+    setIsRedirecting(true);
+    window.location.href = checkoutUrl;
+  };
 
   const priceValue = Number(course?.price || 0);
   const priceLabel = priceValue > 0 ? `ETB ${priceValue.toLocaleString()}` : "Free";
@@ -108,14 +185,18 @@ const Checkout = () => {
                     <Button
                       variant="gradient"
                       className="flex-1"
-                      disabled={isLoading || isRedirecting || !checkoutUrl}
-                      onClick={() => {
-                        if (!checkoutUrl) return;
-                        setIsRedirecting(true);
-                        window.location.href = checkoutUrl;
-                      }}
+                      disabled={
+                        isLoading ||
+                        isRedirecting ||
+                        (isMiniChannel ? !rawRequest : !checkoutUrl)
+                      }
+                      onClick={handleProceed}
                     >
-                      {isRedirecting ? "Redirecting..." : "Proceed"}
+                      {isRedirecting
+                        ? isMiniChannel
+                          ? "Opening mini app payment..."
+                          : "Redirecting..."
+                        : "Proceed"}
                     </Button>
                   </div>
                 </div>
