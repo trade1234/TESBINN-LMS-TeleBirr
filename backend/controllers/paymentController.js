@@ -270,6 +270,19 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
   try {
     const tokenResult = await applyFabricToken(telebirrConfig);
     const fabricToken = tokenResult.token;
+    if (!fabricToken || typeof fabricToken !== "string") {
+      const tokenMessage =
+        tokenResult?.msg ||
+        tokenResult?.message ||
+        tokenResult?.error ||
+        "Failed to obtain Telebirr fabric token.";
+      console.error("[Telebirr] apply token failed", {
+        channel: telebirrConfig.channel,
+        baseUrl: telebirrConfig.baseUrl,
+        response: tokenResult,
+      });
+      throw new Error(tokenMessage);
+    }
     const redirectUrl = courseId
       ? `${process.env.TELEBIRR_REDIRECT_URL}?courseId=${courseId}`
       : process.env.TELEBIRR_REDIRECT_URL;
