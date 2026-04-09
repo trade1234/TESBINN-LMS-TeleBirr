@@ -25,13 +25,22 @@ const getChannel = (value) => {
 };
 
 const readChannelValue = (channel, suffix, fallbackKey) => {
-  const prefix = channel === "mini" ? "TELEBIRR_MINI_" : "TELEBIRR_H5_";
-  return process.env[`${prefix}${suffix}`] || (fallbackKey ? process.env[fallbackKey] : undefined);
+  const channelPrefix = channel === "mini" ? "TELEBIRR_MINI_" : "TELEBIRR_H5_";
+  const h5FallbackKey = `TELEBIRR_H5_${suffix}`;
+  const miniFallbackKey = `TELEBIRR_MINI_${suffix}`;
+
+  return (
+    process.env[`${channelPrefix}${suffix}`] ||
+    (fallbackKey ? process.env[fallbackKey] : undefined) ||
+    (channel === "mini" ? process.env[h5FallbackKey] : process.env[miniFallbackKey]) ||
+    undefined
+  );
 };
 
 const resolveChannelConfig = (channelInput) => {
   const channel = getChannel(channelInput);
-  const baseUrl = readChannelValue(channel, "BASE_URL", "TELEBIRR_BASE_URL");
+  const baseUrl =
+    process.env.TELEBIRR_BASE_URL || readChannelValue(channel, "BASE_URL", "TELEBIRR_BASE_URL");
   const webBaseUrl = readChannelValue(channel, "WEB_BASE_URL", "TELEBIRR_WEB_BASE_URL");
   const fabricAppId = process.env.TELEBIRR_FABRIC_APP_ID;
   const appSecret = process.env.TELEBIRR_APP_SECRET;
