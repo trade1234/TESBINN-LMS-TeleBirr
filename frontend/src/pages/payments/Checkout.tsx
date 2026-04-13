@@ -47,16 +47,20 @@ const Checkout = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const [courseRes, checkoutRes] = await Promise.all([
-          api.get<ApiResponse<Course>>(`/courses/${courseId}`),
-          api.post<ApiResponse<TelebirrCreateOrderData>>("/payments/telebirr/create-order", {
+        const courseRes = await api.get<ApiResponse<Course>>(`/courses/${courseId}`);
+        if (!active) return;
+        setCourse(courseRes.data.data);
+
+        const checkoutRes = await api.post<ApiResponse<TelebirrCreateOrderData>>(
+          "/payments/telebirr/create-order",
+          {
             courseId,
             channel: telebirrChannel,
-          }),
-        ]);
+          }
+        );
         if (!active) return;
+
         const orderData = checkoutRes.data?.data || {};
-        setCourse(courseRes.data.data);
         setCheckoutUrl(orderData.checkoutUrl || null);
         setRawRequest(orderData.rawRequest || null);
         setMerchOrderId(orderData.merchOrderId || null);
@@ -69,6 +73,12 @@ const Checkout = () => {
         }
       } catch (err: any) {
         if (!active) return;
+        if (err?.response?.status === 404) {
+          const backendMessage =
+            err?.response?.data?.error || err?.response?.data?.message;
+          setError(backendMessage || "Course not found or not available for purchase.");
+          return;
+        }
         const message =
           err?.response?.data?.error ||
           err?.response?.data?.message ||
