@@ -80,29 +80,33 @@ const allowedOrigins = allowedOriginsString
 const isLocalSimulatorOrigin = (origin) =>
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (origin === 'null' && allowNullOrigin) {
-        callback(null, true);
-        return;
-      }
-      const normalizedOrigin = normalizeOrigin(origin);
-      if (allowedOrigins.includes(normalizedOrigin) || isLocalSimulatorOrigin(normalizedOrigin)) {
-        callback(null, true);
-        return;
-      }
-      console.warn('[CORS] Blocked origin', { origin, normalizedOrigin });
-      callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    exposedHeaders: ['Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
-  })
-);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    if (origin === 'null' && allowNullOrigin) {
+      callback(null, true);
+      return;
+    }
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (allowedOrigins.includes(normalizedOrigin) || isLocalSimulatorOrigin(normalizedOrigin)) {
+      callback(null, true);
+      return;
+    }
+    console.warn('[CORS] Blocked origin', { origin, normalizedOrigin });
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Serverless-safe DB connection:
 // On Vercel, if you connect at module load and it fails, the function crashes
