@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -77,6 +78,7 @@ const TeacherModules = () => {
     lessonId: string;
   } | null>(null);
   const [lessonEditForm, setLessonEditForm] = useState({
+    moduleId: "",
     title: "",
     description: "",
     lessonType: "video",
@@ -92,6 +94,7 @@ const TeacherModules = () => {
   const [moduleUpdating, setModuleUpdating] = useState(false);
   const [quizUpdating, setQuizUpdating] = useState(false);
   const [lessonUpdating, setLessonUpdating] = useState(false);
+  const [bulkLessonMovingModuleId, setBulkLessonMovingModuleId] = useState<string | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -99,6 +102,10 @@ const TeacherModules = () => {
   const [fileInputKey, setFileInputKey] = useState(0);
   const [lessonQueue, setLessonQueue] = useState<any[]>([]);
   const [queueSaving, setQueueSaving] = useState(false);
+  const [selectedLessonsByModule, setSelectedLessonsByModule] = useState<Record<string, string[]>>(
+    {},
+  );
+  const [lessonMoveTargets, setLessonMoveTargets] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
@@ -163,6 +170,11 @@ const TeacherModules = () => {
     setUploadFeedback(null);
     setFileInputKey((prev) => prev + 1);
   }, [lessonForm.lessonType]);
+
+  useEffect(() => {
+    setSelectedLessonsByModule({});
+    setLessonMoveTargets({});
+  }, [selectedCourseId]);
 
   const stats = useMemo(() => {
     const moduleCount = courses.reduce((sum, course) => sum + (course.modules?.length || 0), 0);
@@ -677,6 +689,13 @@ const TeacherModules = () => {
     );
   };
 
+  const getSortedLessons = (module: CourseModule) =>
+    [...(module.lessons || [])].sort((a, b) => {
+      const aOrder = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
+      const bOrder = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder;
+    });
+
   const handleModuleUpdateStart = (module: CourseModule) => {
     setModuleEditId(module._id);
     setModuleEditForm({
@@ -743,6 +762,7 @@ const TeacherModules = () => {
   const startLessonEdit = (moduleId: string, lesson: CourseLesson) => {
     setLessonEditTarget({ moduleId, lessonId: lesson._id });
     setLessonEditForm({
+      moduleId,
       title: lesson.title,
       description: lesson.description || "",
       lessonType: lesson.lessonType,
@@ -755,8 +775,127 @@ const TeacherModules = () => {
     });
   };
 
+  const getSelectedLessonIds = (moduleId: string) => selectedLessonsByModule[moduleId] || [];
+
+  const toggleLessonSelection = (moduleId: string, lessonId: string, checked: boolean) => {
+    setSelectedLessonsByModule((prev) => {
+      const current = prev[moduleId] || [];
+      const next = checked
+        ? Array.from(new Set([...current, lessonId]))
+        : current.filter((id) => id !== lessonId);
+
+      if (!next.length) {
+        const { [moduleId]: _removed, ...rest } = prev;
+        return rest;
+      }
+
+      return { ...prev, [moduleId]: next };
+    });
+  };
+
+  const toggleAllLessonsInModule = (module: CourseModule, checked: boolean) => {
+    const lessonIds = (module.lessons || []).map((lesson) => lesson._id);
+    setSelectedLessonsByModule((prev) => {
+      if (!checked || lessonIds.length === 0) {
+        const { [module._id]: _removed, ...rest } = prev;
+        return rest;
+      }
+
+      return { ...prev, [module._id]: lessonIds };
+    });
+  };
+
+  const handleBulkLessonMove = async (sourceModule: CourseModule) => {
+    if (!selectedCourse) return;
+
+    const selectedLessonIds = getSelectedLessonIds(sourceModule._id);
+    if (!selectedLessonIds.length) {
+      toast({ title: "Select at least one lesson", variant: "destructive" });
+      return;
+    }
+
+    const targetModuleId = lessonMoveTargets[sourceModule._id];
+    if (!targetModuleId) {
+      toast({ title: "Choose a target module", variant: "destructive" });
+      return;
+    }
+
+    if (targetModuleId === sourceModule._id) {
+      toast({ title: "Choose a different module", variant: "destructive" });
+      return;
+    }
+
+    const lessonsToMove = (sourceModule.lessons || []).filter((lesson) =>
+      selectedLessonIds.includes(lesson._id),
+    );
+    if (!lessonsToMove.length) {
+      toast({ title: "No matching lessons found", variant: "destructive" });
+      return;
+    }
+
+    setBulkLessonMovingModuleId(sourceModule._id);
+    try {
+      const movedLessons: CourseLesson[] = [];
+      for (const lesson of lessonsToMove) {
+        const res = await api.put(
+          `/lessons/${selectedCourse._id}/${sourceModule._id}/${lesson._id}`,
+          { targetModuleId },
+        );
+        movedLessons.push(res.data.data);
+      }
+
+      setCourses((prev) =>
+        prev.map((course) => {
+          if (course._id !== selectedCourse._id) return course;
+          return {
+            ...course,
+            modules: course.modules?.map((module) => {
+              if (module._id === sourceModule._id) {
+                return {
+                  ...module,
+                  lessons: module.lessons?.filter(
+                    (lesson) => !selectedLessonIds.includes(lesson._id),
+                  ),
+                };
+              }
+
+              if (module._id === targetModuleId) {
+                return {
+                  ...module,
+                  lessons: [...(module.lessons || []), ...movedLessons],
+                };
+              }
+
+              return module;
+            }),
+          };
+        }),
+      );
+
+      setSelectedLessonsByModule((prev) => {
+        const { [sourceModule._id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      setLessonMoveTargets((prev) => {
+        const { [sourceModule._id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      toast({ title: `${movedLessons.length} lesson(s) moved` });
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error || err?.response?.data?.message || "Unable to move lessons.";
+      toast({ title: "Lesson move error", description: message, variant: "destructive" });
+    } finally {
+      setBulkLessonMovingModuleId(null);
+    }
+  };
+
   const handleLessonUpdateSave = async () => {
     if (!lessonEditTarget || !selectedCourse) return;
+    if (!lessonEditForm.moduleId) {
+      toast({ title: "Section required", variant: "destructive" });
+      return;
+    }
     if (!lessonEditForm.title.trim()) {
       toast({ title: "Lesson title required", variant: "destructive" });
       return;
@@ -784,7 +923,9 @@ const TeacherModules = () => {
 
     setLessonUpdating(true);
     try {
+      const destinationModuleId = lessonEditForm.moduleId;
       const payload: Record<string, unknown> = {
+        targetModuleId: destinationModuleId,
         title: lessonEditForm.title.trim(),
         description: lessonEditForm.description.trim(),
         lessonType: lessonEditForm.lessonType,
@@ -809,16 +950,37 @@ const TeacherModules = () => {
       setCourses((prev) =>
         prev.map((course) => {
           if (course._id !== selectedCourse._id) return course;
+          const sourceModuleId = lessonEditTarget.moduleId;
+          const isMove = destinationModuleId !== sourceModuleId;
           return {
             ...course,
             modules: course.modules?.map((mod) => {
-              if (mod._id !== lessonEditTarget.moduleId) return mod;
-              return {
-                ...mod,
-                lessons: mod.lessons?.map((lesson) =>
-                  lesson._id === lessonEditTarget.lessonId ? res.data.data : lesson,
-                ),
-              };
+              if (!isMove && mod._id !== sourceModuleId) return mod;
+
+              if (!isMove && mod._id === sourceModuleId) {
+                return {
+                  ...mod,
+                  lessons: mod.lessons?.map((lesson) =>
+                    lesson._id === lessonEditTarget.lessonId ? res.data.data : lesson,
+                  ),
+                };
+              }
+
+              if (mod._id === sourceModuleId) {
+                return {
+                  ...mod,
+                  lessons: mod.lessons?.filter((lesson) => lesson._id !== lessonEditTarget.lessonId),
+                };
+              }
+
+              if (mod._id === destinationModuleId) {
+                return {
+                  ...mod,
+                  lessons: [...(mod.lessons?.filter((lesson) => lesson._id !== lessonEditTarget.lessonId) || []), res.data.data],
+                };
+              }
+
+              return mod;
             }),
           };
         }),
@@ -857,6 +1019,16 @@ const TeacherModules = () => {
       if (lessonEditTarget?.lessonId === lessonId) {
         setLessonEditTarget(null);
       }
+      setSelectedLessonsByModule((prev) => {
+        const current = prev[moduleId];
+        if (!current?.includes(lessonId)) return prev;
+        const next = current.filter((id) => id !== lessonId);
+        if (!next.length) {
+          const { [moduleId]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [moduleId]: next };
+      });
     } catch (err: any) {
       const message =
         err?.response?.data?.error || err?.response?.data?.message || "Unable to delete lesson.";
@@ -1497,18 +1669,88 @@ const TeacherModules = () => {
                     )}
                     {module.lessons && module.lessons.length > 0 && (
                       <div className="space-y-2 pt-2">
-                        {module.lessons.map((lesson) => {
+                        {activeModules.length > 1 && (
+                          <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  checked={
+                                    module.lessons.length > 0 &&
+                                    getSelectedLessonIds(module._id).length === module.lessons.length
+                                  }
+                                  onCheckedChange={(checked) =>
+                                    toggleAllLessonsInModule(module, checked === true)
+                                  }
+                                  disabled={bulkLessonMovingModuleId === module._id}
+                                />
+                                <div>
+                                  <p className="text-sm font-medium">Select lessons to reassign</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {getSelectedLessonIds(module._id).length} selected from this module
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <Select
+                                  value={lessonMoveTargets[module._id] || ""}
+                                  onValueChange={(value) =>
+                                    setLessonMoveTargets((prev) => ({ ...prev, [module._id]: value }))
+                                  }
+                                  disabled={bulkLessonMovingModuleId === module._id}
+                                >
+                                  <SelectTrigger className="sm:w-56">
+                                    <SelectValue placeholder="Move selected to module" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {activeModules
+                                      .filter((item) => item._id !== module._id)
+                                      .map((item) => (
+                                        <SelectItem key={item._id} value={item._id}>
+                                          {item.title}
+                                        </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleBulkLessonMove(module)}
+                                  disabled={
+                                    bulkLessonMovingModuleId === module._id ||
+                                    getSelectedLessonIds(module._id).length === 0
+                                  }
+                                >
+                                  {bulkLessonMovingModuleId === module._id
+                                    ? "Moving..."
+                                    : "Reassign selected"}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {getSortedLessons(module).map((lesson) => {
                           const isEditingLesson =
                             lessonEditTarget?.lessonId === lesson._id &&
                             lessonEditTarget?.moduleId === module._id;
                           return (
                             <div key={lesson._id} className="space-y-2">
-                              <div className="flex items-start justify-between text-sm">
-                                <div>
-                                  <p className="font-medium">{lesson.title}</p>
+                              <div className="flex items-start justify-between gap-3 text-sm">
+                                <div className="flex items-start gap-3">
+                                  <Checkbox
+                                    checked={getSelectedLessonIds(module._id).includes(lesson._id)}
+                                    onCheckedChange={(checked) =>
+                                      toggleLessonSelection(module._id, lesson._id, checked === true)
+                                    }
+                                    disabled={bulkLessonMovingModuleId === module._id}
+                                    className="mt-0.5"
+                                  />
+                                  <div>
+                                    <p className="font-medium">{lesson.title}</p>
                                   <p className="text-xs text-muted-foreground">
                                     {lesson.lessonType} • {lesson.duration || "?"} min
                                   </p>
+                                </div>
                                 </div>
                                 <div className="flex gap-2">
                                   <Button
@@ -1537,13 +1779,23 @@ const TeacherModules = () => {
                               {isEditingLesson && (
                                 <div className="space-y-3 rounded-xl border border-border/70 bg-muted/40 p-4">
                                   <div className="grid gap-3 sm:grid-cols-2">
-                                    <Input
-                                      value={lessonEditForm.title}
-                                      onChange={(e) =>
-                                        setLessonEditForm((prev) => ({ ...prev, title: e.target.value }))
+                                    <Select
+                                      value={lessonEditForm.moduleId}
+                                      onValueChange={(value) =>
+                                        setLessonEditForm((prev) => ({ ...prev, moduleId: value }))
                                       }
-                                      placeholder="Lesson title"
-                                    />
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Choose section" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {activeModules.map((item) => (
+                                          <SelectItem key={item._id} value={item._id}>
+                                            {item.title}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                     <Input
                                       type="number"
                                       value={lessonEditForm.order}
@@ -1552,6 +1804,18 @@ const TeacherModules = () => {
                                       }
                                       placeholder="Order"
                                     />
+                                  </div>
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    <Input
+                                      value={lessonEditForm.title}
+                                      onChange={(e) =>
+                                        setLessonEditForm((prev) => ({ ...prev, title: e.target.value }))
+                                      }
+                                      placeholder="Lesson title"
+                                    />
+                                    <div className="flex items-center rounded-md border border-dashed border-border/70 px-3 text-xs text-muted-foreground">
+                                      Reassign this lesson to another section if needed.
+                                    </div>
                                   </div>
                                   <Textarea
                                     value={lessonEditForm.description}

@@ -74,6 +74,10 @@ exports.updateLesson = asyncHandler(async (req, res, next) => {
   const lessonDoc = moduleDoc.lessons.id(req.params.lessonId);
   if (!lessonDoc) return next(new ErrorResponse('Lesson not found', 404));
 
+  const destinationModuleId = req.body.targetModuleId || req.body.moduleId || req.params.moduleId;
+  const destinationModule = course.modules.id(destinationModuleId);
+  if (!destinationModule) return next(new ErrorResponse('Destination module not found', 404));
+
   const updatable = [
     'title',
     'description',
@@ -86,12 +90,25 @@ exports.updateLesson = asyncHandler(async (req, res, next) => {
     'order',
     'isFree',
   ];
-  updatable.forEach((k) => {
-    if (req.body[k] !== undefined) lessonDoc[k] = req.body[k];
-  });
+  const movingLesson = destinationModuleId.toString() !== req.params.moduleId;
+
+  if (movingLesson) {
+    const lessonData = lessonDoc.toObject();
+    updatable.forEach((k) => {
+      if (req.body[k] !== undefined) lessonData[k] = req.body[k];
+    });
+
+    lessonDoc.deleteOne();
+    destinationModule.lessons.push(lessonData);
+  } else {
+    updatable.forEach((k) => {
+      if (req.body[k] !== undefined) lessonDoc[k] = req.body[k];
+    });
+  }
 
   await course.save();
-  res.status(200).json({ success: true, data: lessonDoc });
+  const updatedLesson = destinationModule.lessons.id(req.params.lessonId);
+  res.status(200).json({ success: true, data: updatedLesson });
 });
 
 exports.deleteLesson = asyncHandler(async (req, res, next) => {
