@@ -59,7 +59,9 @@ const defaultOrigins = [
   'http://172.16.0.2:8081',
   'http://172.16.0.2:8082',
   'http://44.209.130.119',
-  'http://13.222.168.70/api/v1/payments/telebirr/create-order'
+  'http://13.222.168.70/api/v1/payments/telebirr/create-order',
+  'https://tesbinn-lms-tele-birr-front.vercel.app',
+  'https://54.173.161.116'
 ];
 const envOrigins = [process.env.ALLOWED_ORIGINS, process.env.FRONTEND_URL].filter(Boolean);
 const allowedOriginsString = [defaultOrigins.join(','), ...envOrigins].join(',');
