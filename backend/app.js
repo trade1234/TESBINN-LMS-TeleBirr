@@ -119,6 +119,7 @@ app.use(async (req, res, next) => {
   if (
     req.path === '/api/v1/health' ||
     req.path === '/health' ||
+    req.path === '/' ||
     req.path.startsWith('/api/v1/youtube')
   ) {
     next();
