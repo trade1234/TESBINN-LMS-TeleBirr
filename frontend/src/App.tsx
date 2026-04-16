@@ -25,6 +25,8 @@ import Blog from "./pages/company/Blog";
 import BlogPostPage from "./pages/company/BlogPost";
 import Press from "./pages/company/Press";
 import StudentDashboard from "./pages/student/StudentDashboard";
+import StudentBrowse from "./pages/student/StudentBrowse";
+import StudentCourseDetails from "./pages/student/StudentCourseDetails";
 import StudentCoursePlayer from "./pages/student/StudentCoursePlayer";
 import StudentCourses from "./pages/student/StudentCourses";
 import StudentCertificates from "./pages/student/StudentCertificates";
@@ -90,7 +92,8 @@ const App = () => (
           <Route path="/student" element={<StudentDashboard />} />
           <Route path="/student/courses" element={<StudentCourses />} />
           <Route path="/student/courses/:courseId" element={<StudentCoursePlayer />} />
-          <Route path="/student/browse" element={<CourseCatalog />} />
+          <Route path="/student/browse" element={<StudentBrowse />} />
+          <Route path="/student/browse/:courseId" element={<StudentCourseDetails />} />
           <Route path="/student/certificates" element={<StudentCertificates />} />
           <Route path="/student/progress" element={<StudentDashboard />} />
           <Route path="/student/settings" element={<StudentSettings />} />

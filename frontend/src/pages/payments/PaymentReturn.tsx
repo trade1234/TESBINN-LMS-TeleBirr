@@ -60,7 +60,7 @@ const PaymentReturn = () => {
         if (enrollment?.approvalStatus === "approved") {
           setStatus("approved");
           if (course) {
-            navigate(`/course/${course}`, { replace: true });
+            navigate(`/student/courses/${course}`, { replace: true });
           }
         } else if (enrollment?.paymentStatus === "failed") {
           setStatus("failed");
@@ -105,11 +105,11 @@ const PaymentReturn = () => {
                 <Link to="/student/courses">My courses</Link>
               </Button>
               {courseId && (
-                <Button asChild variant="gradient">
-                  <Link to={`/course/${courseId}`}>Back to course</Link>
-                </Button>
-              )}
-            </div>
+              <Button asChild variant="gradient">
+                  <Link to={`/student/browse/${courseId}`}>Back to course</Link>
+              </Button>
+            )}
+          </div>
           </div>
         </div>
       </main>

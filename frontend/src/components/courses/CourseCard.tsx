@@ -54,25 +54,25 @@ const CourseCard = ({
       : "Free";
 
   return (
-        <div
-          className={cn(
-            "group glass-card rounded-xl overflow-hidden card-hover",
-            isFeatured && "md:flex md:flex-row"
-          )}
-        >
+    <div
+      className={cn(
+        "group glass-card rounded-xl overflow-hidden card-hover",
+        isFeatured && "md:flex md:flex-row"
+      )}
+    >
       {/* Thumbnail */}
-        <div
-          className={cn(
-            "relative overflow-hidden bg-muted",
-            isFeatured ? "md:w-2/5 aspect-video md:aspect-auto" : "aspect-video",
-            isCompact && "aspect-[4/3]"
-          )}
-        >
-          <img
-            src={thumbnail}
-            alt={title}
-            className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
-          />
+      <div
+        className={cn(
+          "relative overflow-hidden bg-muted",
+          isFeatured ? "md:w-2/5 aspect-video md:aspect-auto" : "aspect-video",
+          isCompact && "aspect-[4/3]"
+        )}
+      >
+        <img
+          src={thumbnail}
+          alt={title}
+          className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
           <Button variant="hero" size="icon-lg" className="rounded-full">
             <Play className="h-6 w-6" />
@@ -93,8 +93,8 @@ const CourseCard = ({
       </div>
 
       {/* Content */}
-      <div className={cn("p-5", isFeatured && "md:flex-1 md:p-6")}>
-        <div className="flex items-center gap-2 mb-2">
+      <div className={cn("p-4 sm:p-5", isFeatured && "md:flex-1 md:p-6")}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
           <div className="flex items-center gap-1">
             <Star className="h-4 w-4 text-warning fill-warning" />
             <span className="text-sm font-medium">{rating.toFixed(1)}</span>
@@ -104,7 +104,7 @@ const CourseCard = ({
         </div>
 
         <h3 className={cn(
-          "font-semibold text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors",
+          "font-semibold text-foreground mb-2 line-clamp-2 break-words group-hover:text-primary transition-colors",
           isFeatured ? "text-xl lg:text-2xl" : "text-lg"
         )}>
           {title}
@@ -112,14 +112,14 @@ const CourseCard = ({
 
         {!isCompact && (
           <p className={cn(
-            "text-muted-foreground mb-4 line-clamp-2",
+            "text-muted-foreground mb-4 line-clamp-2 break-words",
             isFeatured && "lg:line-clamp-3"
           )}>
             {description}
           </p>
         )}
 
-        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-muted-foreground mb-4">
           <div className="flex items-center gap-1.5">
             <Clock className="h-4 w-4" />
             <span>{duration}</span>

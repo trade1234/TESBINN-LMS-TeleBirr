@@ -221,6 +221,10 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
     loadNotifications();
   }, [notificationsOpen]);
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.readAt) {
       await markNotificationRead(notification._id);
@@ -243,7 +247,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex overflow-x-hidden">
       {/* Desktop Sidebar */}
       <aside
         className={cn(
@@ -329,11 +333,11 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 lg:ml-64">
+      <div className="flex-1 min-w-0 lg:ml-64">
         {/* Top Header */}
         <header className="sticky top-0 z-30 h-16 lg:h-20 bg-background/80 backdrop-blur-xl border-b border-border">
-          <div className="h-full px-4 lg:px-8 flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="h-full px-3 sm:px-4 lg:px-8 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <Button
                 variant="ghost"
                 size="icon"
@@ -351,7 +355,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 sm:gap-3 shrink-0">
               {/* Search */}
               <Button variant="ghost" size="icon" className="hidden sm:flex">
                 <Search className="h-5 w-5" />
@@ -367,7 +371,10 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 p-0">
+                <DropdownMenuContent
+                  align="end"
+                  className="w-[calc(100vw-1rem)] max-w-80 p-0 mr-2 sm:mr-0"
+                >
                   <div className="border-b border-border px-4 py-3 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold">Notifications</p>
@@ -462,7 +469,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
         </header>
 
         {/* Page Content */}
-        <main className="p-4 lg:p-8 pb-24 lg:pb-8">
+        <main className="p-3 sm:p-4 lg:p-8 pb-24 lg:pb-8 min-w-0">
           {children || <Outlet />}
         </main>
 
@@ -470,18 +477,20 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
         <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border lg:hidden">
           <div className="flex items-center justify-around h-16">
             {mobileNavItems.map((item) => {
-              const isActive = location.pathname === item.href;
+              const isActive =
+                location.pathname === item.href ||
+                (item.href !== `/${role}` && location.pathname.startsWith(item.href));
               return (
                 <Link
                   key={item.href}
                   to={item.href}
                   className={cn(
-                    "flex flex-col items-center gap-1 px-4 py-2 transition-colors",
+                    "flex min-w-0 flex-1 flex-col items-center gap-1 px-2 py-2 transition-colors",
                     isActive ? "text-primary" : "text-muted-foreground"
                   )}
                 >
                   <item.icon className="h-5 w-5" />
-                  <span className="text-xs font-medium">{item.label}</span>
+                  <span className="max-w-full truncate text-[10px] font-medium sm:text-xs">{item.label}</span>
                 </Link>
               );
             })}
