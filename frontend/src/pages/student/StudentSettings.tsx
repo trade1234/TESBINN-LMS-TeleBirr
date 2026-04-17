@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { getSafeImageUrl } from "@/lib/media";
 import type { MeResponse } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -241,7 +242,7 @@ const StudentSettings = () => {
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Avatar className="h-16 w-16">
-                  <AvatarImage src={profile?.profileImage || ""} alt={displayName} />
+                  <AvatarImage src={getSafeImageUrl(profile?.profileImage) || ""} alt={displayName} />
                   <AvatarFallback className="bg-secondary text-secondary-foreground">
                     {avatarInitials}
                   </AvatarFallback>

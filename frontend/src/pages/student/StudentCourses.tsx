@@ -8,6 +8,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import CourseCard from "@/components/courses/CourseCard";
 import { api } from "@/lib/api";
 import { minutesToDurationLabel } from "@/lib/format";
+import { hasRemoteImageUrl } from "@/lib/media";
 import type { ApiResponse, Enrollment } from "@/lib/types";
 
 type StatusFilterValue = Enrollment["completionStatus"] | "all";
@@ -146,7 +147,7 @@ const StudentCourses = () => {
             ? `/courses/${course._id}`
             : `/student/courses/${course._id}`;
       const lessons = (course.modules || []).reduce((sum, module) => sum + (module.lessons || []).length, 0);
-      const thumbnail = course.imageUrl?.startsWith("http")
+      const thumbnail = hasRemoteImageUrl(course.imageUrl)
         ? course.imageUrl
         : "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&h=450&fit=crop";
 

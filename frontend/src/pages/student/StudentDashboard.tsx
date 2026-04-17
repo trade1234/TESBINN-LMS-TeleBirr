@@ -10,6 +10,7 @@ import CourseCard from "@/components/courses/CourseCard";
 import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import { minutesToDurationLabel } from "@/lib/format";
+import { hasRemoteImageUrl } from "@/lib/media";
 import type {
   ApiResponse,
   Enrollment,
@@ -142,7 +143,7 @@ const StudentDashboard = () => {
     return sorted.slice(0, 4).map((en) => {
       const c = en.course;
       const lessons = (c.modules || []).reduce((sum, m) => sum + (m.lessons || []).length, 0);
-      const thumbnail = c.imageUrl?.startsWith("http")
+      const thumbnail = hasRemoteImageUrl(c.imageUrl)
         ? c.imageUrl
         : "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&h=450&fit=crop";
 

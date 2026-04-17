@@ -21,6 +21,7 @@ import StatsCard from "@/components/dashboard/StatsCard";
 import ProgressChart from "@/components/dashboard/ProgressChart";
 import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { getSafeImageUrl } from "@/lib/media";
 import type { ApiResponse, Course, User } from "@/lib/types";
 import type { AdminAnalyticsData } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -398,7 +399,7 @@ const adminQuickLinks = [
                   className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                 >
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={teacher.profileImage || ""} />
+                    <AvatarImage src={getSafeImageUrl(teacher.profileImage) || ""} />
                     <AvatarFallback className="bg-secondary text-secondary-foreground">
                       {teacher.name.split(" ").map((n) => n[0]).join("")}
                     </AvatarFallback>

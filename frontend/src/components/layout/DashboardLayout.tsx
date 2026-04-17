@@ -37,6 +37,7 @@ import Logo from "./Logo";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
+import { getSafeImageUrl } from "@/lib/media";
 import type { ApiResponse, MeResponse, Notification } from "@/lib/types";
 
 interface NavItem {
@@ -273,7 +274,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
           <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
-                <AvatarImage src={profile?.profileImage || ""} />
+                <AvatarImage src={getSafeImageUrl(profile?.profileImage) || ""} />
                 <AvatarFallback className="bg-secondary text-secondary-foreground">
                   {avatarInitials || "JD"}
                 </AvatarFallback>
@@ -443,7 +444,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" title="Open profile menu">
                     <Avatar className="h-9 w-9 cursor-pointer" title={displayName}>
-                      <AvatarImage src={profile?.profileImage || ""} />
+                      <AvatarImage src={getSafeImageUrl(profile?.profileImage) || ""} />
                       <AvatarFallback className="bg-secondary text-secondary-foreground text-sm">
                         {avatarInitials || "JD"}
                       </AvatarFallback>

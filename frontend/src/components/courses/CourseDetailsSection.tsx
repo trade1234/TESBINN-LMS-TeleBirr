@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import { minutesToDurationLabel } from "@/lib/format";
+import { hasRemoteImageUrl } from "@/lib/media";
 import type { ApiResponse, Course, Enrollment } from "@/lib/types";
 
 interface CourseDetailsSectionProps {
@@ -178,7 +179,7 @@ const CourseDetailsSection = ({
               <div className="aspect-video bg-muted">
                 <img
                   src={
-                    course.imageUrl?.startsWith("http")
+                    hasRemoteImageUrl(course.imageUrl)
                       ? course.imageUrl
                       : "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&h=675&fit=crop"
                   }

@@ -4,6 +4,7 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { getSafeImageUrl } from "@/lib/media";
 import type { ApiResponse, Course } from "@/lib/types";
 
 type TelebirrCreateOrderData = {
@@ -12,19 +13,219 @@ type TelebirrCreateOrderData = {
   merchOrderId?: string;
 };
 
+type TelebirrAuthTokenData = {
+  openId?: string | null;
+  identityId?: string | null;
+  identityType?: string | null;
+  walletIdentityId?: string | null;
+  identifier?: string | null;
+  nickName?: string | null;
+  status?: string | null;
+};
+
 type MiniAppBridge = {
   startPay?: (options: {
     rawRequest: string;
     success?: (result: { resultCode?: string }) => void;
     fail?: (error: { message?: string; errorMessage?: string }) => void;
   }) => void;
+  tradePay?: (options: {
+    rawRequest?: string;
+    tradeNO?: string;
+    orderStr?: string;
+    sign?: string;
+    extendParam?: string;
+    success?: (result: { resultCode?: string }) => void;
+    fail?: (error: { message?: string; errorMessage?: string }) => void;
+  }) => void;
+  native?: (
+    method: string,
+    options: Record<string, string>
+  ) => Promise<{ resultCode?: string; token?: string }>;
 };
 
 const telebirrChannel = (import.meta.env.VITE_TELEBIRR_CHANNEL || "h5").toLowerCase();
+const resolveMiniAppSdkUrl = () => {
+  const configuredUrl = import.meta.env.VITE_MINI_APP_SDK_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBase}js-sdk.min.js`;
+};
+const miniAppSdkUrl = resolveMiniAppSdkUrl();
 
 const getMiniAppBridge = (): MiniAppBridge | null => {
   if (typeof window === "undefined") return null;
-  return (window as Window & { ma?: MiniAppBridge }).ma || null;
+  const runtimeWindow = window as Window & { ma?: MiniAppBridge; my?: MiniAppBridge };
+  return runtimeWindow.ma || runtimeWindow.my || null;
+};
+
+const getRawRequestParam = (rawRequest: string, key: string) => {
+  const params = new URLSearchParams(rawRequest.trim());
+  return params.get(key);
+};
+
+const getMiniAppAccessToken = async (bridge: MiniAppBridge, rawRequest: string) => {
+  if (!bridge.native) {
+    return null;
+  }
+
+  const appId = getRawRequestParam(rawRequest, "appid");
+  if (!appId) {
+    throw new Error("Missing appid in mini app payment request.");
+  }
+
+  const tokenResponse = await bridge.native("getMiniAppToken", { appId });
+  if (!tokenResponse?.token) {
+    throw new Error("Mini App access token was not returned by the SuperApp.");
+  }
+
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem("mini_app_access_token", tokenResponse.token);
+  }
+
+  return tokenResponse.token;
+};
+
+const exchangeMiniAppAccessToken = async (accessToken: string) => {
+  const response = await api.post<ApiResponse<TelebirrAuthTokenData>>(
+    "/payments/telebirr/auth-token",
+    {
+      accessToken,
+      channel: "mini",
+    }
+  );
+
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(
+      "telebirr_auth_identity",
+      JSON.stringify(response.data?.data || {})
+    );
+  }
+
+  return response.data?.data || null;
+};
+
+const loadMiniAppSdk = async () => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+  if (getMiniAppBridge()) {
+    return;
+  }
+
+  const existingScript = document.querySelector<HTMLScriptElement>(
+    `script[data-miniapp-sdk="true"]`
+  );
+
+  if (existingScript) {
+    await new Promise<void>((resolve, reject) => {
+      if (getMiniAppBridge()) {
+        resolve();
+        return;
+      }
+
+      const handleLoad = () => resolve();
+      const handleError = () => reject(new Error(`Failed to load mini app SDK from ${miniAppSdkUrl}`));
+
+      existingScript.addEventListener("load", handleLoad, { once: true });
+      existingScript.addEventListener("error", handleError, { once: true });
+    });
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = miniAppSdkUrl;
+    script.async = true;
+    script.dataset.miniappSdk = "true";
+    script.onload = () => resolve();
+    script.onerror = () =>
+      reject(new Error(`Failed to load mini app SDK from ${miniAppSdkUrl}`));
+    document.head.appendChild(script);
+  });
+};
+
+const startMiniAppPayment = (
+  bridge: MiniAppBridge,
+  request: string,
+  callbacks: {
+    onSuccess: (result: { resultCode?: string }) => void;
+    onFail: (error: { message?: string; errorMessage?: string }) => void;
+  }
+) => {
+  const normalizedRequest = request.trim();
+  let settled = false;
+  const settleSuccess = (result: { resultCode?: string }) => {
+    if (settled) return;
+    settled = true;
+    callbacks.onSuccess(result);
+  };
+  const settleFail = (error: { message?: string; errorMessage?: string }) => {
+    if (settled) return;
+    settled = true;
+    callbacks.onFail(error);
+  };
+  const timeoutId = window.setTimeout(() => {
+    settleFail({
+      message:
+        "Mini app payment bridge did not respond. This usually means the runtime does not support the requested payment API or the SDK method name is mismatched.",
+    });
+  }, 10000);
+
+  const wrapSuccess = (result: { resultCode?: string }) => {
+    window.clearTimeout(timeoutId);
+    settleSuccess(result);
+  };
+  const wrapFail = (error: { message?: string; errorMessage?: string }) => {
+    window.clearTimeout(timeoutId);
+    settleFail(error);
+  };
+
+  if (bridge.native) {
+    bridge
+      .native("startPay", {
+        rawRequest: normalizedRequest,
+        bussinessType: "BuyGoods",
+      })
+      .then((result) => {
+        window.clearTimeout(timeoutId);
+        wrapSuccess(result);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        wrapFail({
+          message:
+            error?.message ||
+            error?.errorMessage ||
+            "Mini app payment failed.",
+        });
+      });
+    return true;
+  }
+
+  if (bridge.startPay) {
+    bridge.startPay({
+      rawRequest: normalizedRequest,
+      success: wrapSuccess,
+      fail: wrapFail,
+    });
+    return true;
+  }
+
+  if (bridge.tradePay) {
+    bridge.tradePay({
+      rawRequest: normalizedRequest,
+      success: wrapSuccess,
+      fail: wrapFail,
+    });
+    return true;
+  }
+
+  return false;
 };
 
 const Checkout = () => {
@@ -96,24 +297,49 @@ const Checkout = () => {
     };
   }, [courseId, isMiniChannel]);
 
-  const handleProceed = () => {
+  const handleProceed = async () => {
     setError(null);
 
     if (isMiniChannel) {
-      const bridge = getMiniAppBridge();
       if (!rawRequest) {
         setError("Mini app payment is unavailable because rawRequest was not returned.");
         return;
       }
-      if (!bridge?.startPay) {
-        setError("Mini app payment bridge is not available in this runtime.");
+
+      try {
+        await loadMiniAppSdk();
+      } catch (sdkError: any) {
+        setError(
+          sdkError?.message ||
+            "Failed to load the Mini App payment SDK."
+        );
         return;
       }
 
+      const bridge = getMiniAppBridge();
+      if (!bridge) {
+        setError(
+          "Mini app payment bridge is not available in this runtime. Ensure js-sdk.min.js is bundled and the page is running inside the Telebirr Mini App runtime."
+        );
+        return;
+      }
+
+      try {
+        const accessToken = await getMiniAppAccessToken(bridge, rawRequest);
+        if (accessToken) {
+          await exchangeMiniAppAccessToken(accessToken);
+        }
+      } catch (tokenError: any) {
+        console.warn("[Telebirr] Mini App access token request failed", {
+          message:
+            tokenError?.message ||
+            "Failed to obtain Mini App access token.",
+        });
+      }
+
       setIsRedirecting(true);
-      bridge.startPay({
-        rawRequest: rawRequest.trim(),
-        success: (result) => {
+      const started = startMiniAppPayment(bridge, rawRequest, {
+        onSuccess: (result) => {
           if (result?.resultCode === "1") {
             navigate(
               `/payment/return?courseId=${encodeURIComponent(courseId || "")}${merchOrderId ? `&merch_order_id=${encodeURIComponent(merchOrderId)}` : ""}`
@@ -133,6 +359,11 @@ const Checkout = () => {
           setError(message);
         },
       });
+
+      if (!started) {
+        setIsRedirecting(false);
+        setError("Mini app payment bridge is not available in this runtime.");
+      }
       return;
     }
 
@@ -143,6 +374,7 @@ const Checkout = () => {
 
   const priceValue = Number(course?.price || 0);
   const priceLabel = priceValue > 0 ? `ETB ${priceValue.toLocaleString()}` : "Free";
+  const courseImageUrl = getSafeImageUrl(course?.imageUrl);
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,9 +386,9 @@ const Checkout = () => {
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="md:w-1/2">
                   <div className="aspect-video rounded-xl overflow-hidden bg-muted">
-                    {course?.imageUrl ? (
+                    {courseImageUrl ? (
                       <img
-                        src={course.imageUrl}
+                        src={courseImageUrl}
                         alt={course.title}
                         className="w-full h-full object-contain"
                       />

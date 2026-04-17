@@ -5,6 +5,7 @@ const TelebirrCallbackLog = require("../models/TelebirrCallbackLog");
 const ErrorResponse = require("../utils/errorResponse");
 const asyncHandler = require("../middleware/async");
 const applyFabricToken = require("../service/applyFabricTokenService");
+const authTokenService = require("../service/authTokenService");
 const orderService = require("../service/requestCreateOrderService");
 const telebirrConfigModule = require("../service/config");
 
@@ -188,6 +189,75 @@ const sanitizeTitle = (value) => {
   const raw = typeof value === "string" ? value : "";
   return raw.replace(/[~`!#$%^*()\-+=|/<>?;:"\[\]{}\\&]/g, " ").replace(/\s+/g, " ").trim();
 };
+
+exports.authTelebirrToken = asyncHandler(async (req, res, next) => {
+  const { accessToken, channel: requestedChannel } = req.body;
+  if (!accessToken || typeof accessToken !== "string") {
+    return next(new ErrorResponse("accessToken is required", 400));
+  }
+
+  const channel = telebirrConfigModule.getChannel(
+    requestedChannel || req.headers["x-telebirr-channel"] || "mini"
+  );
+  const telebirrConfig = telebirrConfigModule.resolveChannelConfig(channel);
+  const missingEnv = telebirrConfig.missingEnv;
+
+  if (missingEnv.length) {
+    return next(
+      new ErrorResponse(
+        `Missing Telebirr environment variables: ${missingEnv.join(", ")}`,
+        503
+      )
+    );
+  }
+
+  let authTokenResult;
+  try {
+    const tokenResult = await applyFabricToken(telebirrConfig);
+    const fabricToken = tokenResult.token;
+    if (!fabricToken || typeof fabricToken !== "string") {
+      const tokenMessage =
+        tokenResult?.msg ||
+        tokenResult?.message ||
+        tokenResult?.error ||
+        "Failed to obtain Telebirr fabric token.";
+      console.error("[Telebirr] apply token failed for auth token", {
+        channel: telebirrConfig.channel,
+        baseUrl: telebirrConfig.baseUrl,
+        response: tokenResult,
+      });
+      throw new Error(tokenMessage);
+    }
+
+    authTokenResult = await authTokenService.requestAuthToken(
+      fabricToken,
+      accessToken.trim(),
+      telebirrConfig
+    );
+  } catch (err) {
+    return next(new ErrorResponse(err?.message || "Telebirr auth token request failed", 502));
+  }
+
+  if (authTokenResult?.result !== "SUCCESS") {
+    const message = authTokenResult?.msg || "Failed to exchange Telebirr auth token.";
+    return next(new ErrorResponse(message, 400));
+  }
+
+  const bizContent = authTokenResult?.biz_content || {};
+  res.status(200).json({
+    success: true,
+    data: {
+      openId: bizContent.open_id || null,
+      identityId: bizContent.identityId || null,
+      identityType: bizContent.identityType || null,
+      walletIdentityId: bizContent.walletIdentityId || null,
+      identifier: bizContent.identifier || null,
+      nickName: bizContent.nickName || null,
+      status: bizContent.status || null,
+      raw: authTokenResult,
+    },
+  });
+});
 
 exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
   const { courseId, channel: requestedChannel } = req.body;
