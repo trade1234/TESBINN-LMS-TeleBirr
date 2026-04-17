@@ -39,25 +39,30 @@ const readChannelValue = (channel, suffix, fallbackKey) => {
 
 const resolveChannelConfig = (channelInput) => {
   const channel = getChannel(channelInput);
-  const baseUrl =
-    process.env.TELEBIRR_BASE_URL || readChannelValue(channel, "BASE_URL", "TELEBIRR_BASE_URL");
+  const baseUrl = readChannelValue(channel, "BASE_URL", "TELEBIRR_BASE_URL");
   const webBaseUrl = readChannelValue(channel, "WEB_BASE_URL", "TELEBIRR_WEB_BASE_URL");
-  const fabricAppId = process.env.TELEBIRR_FABRIC_APP_ID;
-  const appSecret = process.env.TELEBIRR_APP_SECRET;
+  const fabricAppId = readChannelValue(
+    channel,
+    "FABRIC_APP_ID",
+    "TELEBIRR_FABRIC_APP_ID"
+  );
+  const appSecret = readChannelValue(channel, "APP_SECRET", "TELEBIRR_APP_SECRET");
   const merchantAppId = readChannelValue(channel, "MERCHANT_APP_ID", "TELEBIRR_MERCHANT_APP_ID");
-  const merchantCode = process.env.TELEBIRR_MERCHANT_CODE;
+  const merchantCode = readChannelValue(
+    channel,
+    "MERCHANT_CODE",
+    "TELEBIRR_MERCHANT_CODE"
+  );
   const privateKey = normalizeKey(
     readChannelValue(channel, "PRIVATE_KEY", "TELEBIRR_PRIVATE_KEY")
   );
   const tradeType =
-    process.env[`TELEBIRR_${channel.toUpperCase()}_TRADE_TYPE`] ||
-    process.env.TELEBIRR_TRADE_TYPE ||
+    readChannelValue(channel, "TRADE_TYPE", "TELEBIRR_TRADE_TYPE") ||
     (channel === "mini" ? "InApp" : "Checkout");
   const includeRedirect =
     process.env.TELEBIRR_INCLUDE_REDIRECT === "true" || tradeType !== "InApp";
   const otherParams =
-    process.env[`TELEBIRR_${channel.toUpperCase()}_OTHER_PARAMS`] ||
-    process.env.TELEBIRR_OTHER_PARAMS ||
+    readChannelValue(channel, "OTHER_PARAMS", "TELEBIRR_OTHER_PARAMS") ||
     (tradeType === "InApp" ? "" : "&version=1.0&trade_type=Checkout");
 
   const requiredEnv = [
@@ -83,8 +88,8 @@ const resolveChannelConfig = (channelInput) => {
     appSecret,
     merchantAppId,
     merchantCode,
-    notifyUrl: process.env.TELEBIRR_NOTIFY_URL,
-    redirectUrl: process.env.TELEBIRR_REDIRECT_URL,
+    notifyUrl: readChannelValue(channel, "NOTIFY_URL", "TELEBIRR_NOTIFY_URL"),
+    redirectUrl: readChannelValue(channel, "REDIRECT_URL", "TELEBIRR_REDIRECT_URL"),
     tradeType,
     businessType: process.env.TELEBIRR_BUSINESS_TYPE || "BuyGoods",
     transCurrency: process.env.TELEBIRR_TRANS_CURRENCY || "ETB",
