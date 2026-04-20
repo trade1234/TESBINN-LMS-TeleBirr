@@ -37,8 +37,33 @@ const readChannelValue = (channel, suffix, fallbackKey) => {
   );
 };
 
+const getRequiredEnvLabels = (channel) => {
+  if (channel === "mini") {
+    return {
+      baseUrl: "TELEBIRR_MINI_BASE_URL",
+      fabricAppId: "TELEBIRR_MINI_FABRIC_APP_ID",
+      appSecret: "TELEBIRR_MINI_APP_SECRET",
+      merchantAppId: "TELEBIRR_MINI_MERCHANT_APP_ID",
+      merchantCode: "TELEBIRR_MINI_MERCHANT_CODE",
+      privateKey: "TELEBIRR_MINI_PRIVATE_KEY",
+      webBaseUrl: "TELEBIRR_MINI_WEB_BASE_URL",
+    };
+  }
+
+  return {
+    baseUrl: "TELEBIRR_BASE_URL",
+    fabricAppId: "TELEBIRR_FABRIC_APP_ID",
+    appSecret: "TELEBIRR_APP_SECRET",
+    merchantAppId: "TELEBIRR_MERCHANT_APP_ID",
+    merchantCode: "TELEBIRR_MERCHANT_CODE",
+    privateKey: "TELEBIRR_PRIVATE_KEY",
+    webBaseUrl: "TELEBIRR_WEB_BASE_URL",
+  };
+};
+
 const resolveChannelConfig = (channelInput) => {
   const channel = getChannel(channelInput);
+  const envLabels = getRequiredEnvLabels(channel);
   const baseUrl = readChannelValue(channel, "BASE_URL", "TELEBIRR_BASE_URL");
   const webBaseUrl = readChannelValue(channel, "WEB_BASE_URL", "TELEBIRR_WEB_BASE_URL");
   const fabricAppId = readChannelValue(
@@ -66,17 +91,24 @@ const resolveChannelConfig = (channelInput) => {
     (tradeType === "InApp" ? "" : "&version=1.0&trade_type=Checkout");
 
   const requiredEnv = [
-    ["TELEBIRR_BASE_URL", baseUrl],
-    ["TELEBIRR_FABRIC_APP_ID", fabricAppId],
-    ["TELEBIRR_APP_SECRET", appSecret],
-    ["TELEBIRR_MERCHANT_APP_ID", merchantAppId],
-    ["TELEBIRR_MERCHANT_CODE", merchantCode],
-    ["TELEBIRR_PRIVATE_KEY", privateKey],
+    [envLabels.baseUrl, baseUrl],
+    [envLabels.fabricAppId, fabricAppId],
+    [envLabels.appSecret, appSecret],
+    [envLabels.merchantAppId, merchantAppId],
+    [envLabels.merchantCode, merchantCode],
+    [envLabels.privateKey, privateKey],
   ];
 
   if (tradeType !== "InApp") {
-    requiredEnv.push(["TELEBIRR_WEB_BASE_URL", webBaseUrl]);
+    requiredEnv.push([envLabels.webBaseUrl, webBaseUrl]);
   }
+
+  const rejectUnauthorizedValue =
+    channel === "mini"
+      ? process.env.TELEBIRR_MINI_REJECT_UNAUTHORIZED
+      : process.env.TELEBIRR_H5_REJECT_UNAUTHORIZED;
+  const rejectUnauthorized =
+    (rejectUnauthorizedValue ?? process.env.TELEBIRR_REJECT_UNAUTHORIZED) !== "false";
 
   return {
     channel,
@@ -103,7 +135,7 @@ const resolveChannelConfig = (channelInput) => {
     includeRedirect,
     includeCallbackInfo: process.env.TELEBIRR_INCLUDE_CALLBACK_INFO === "true",
     privateKey,
-    rejectUnauthorized: process.env.TELEBIRR_REJECT_UNAUTHORIZED !== "false",
+    rejectUnauthorized,
     caCert,
   };
 };

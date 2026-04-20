@@ -27,6 +27,7 @@ const postJson = (url, headers, body, configOverride) =>
         raw += chunk;
       });
       res.on("end", () => {
+        console.log("[Telebirr] raw token response:", raw);
         if (!raw) {
           reject(new Error("Empty response from Telebirr"));
           return;

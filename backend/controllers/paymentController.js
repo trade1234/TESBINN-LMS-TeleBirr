@@ -354,8 +354,8 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
       throw new Error(tokenMessage);
     }
     const redirectUrl = courseId
-      ? `${process.env.TELEBIRR_REDIRECT_URL}?courseId=${courseId}`
-      : process.env.TELEBIRR_REDIRECT_URL;
+      ? `${telebirrConfig.redirectUrl}?courseId=${courseId}`
+      : telebirrConfig.redirectUrl;
     const sanitizedTitle = sanitizeTitle(course.title) || "Course";
     createOrderResult = await orderService.requestCreateOrder(
       fabricToken,
