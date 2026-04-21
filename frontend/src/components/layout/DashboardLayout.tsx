@@ -27,6 +27,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -95,6 +103,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [profilePromptOpen, setProfilePromptOpen] = useState(false);
 
   const navItems = role === "admin" ? adminNav : role === "teacher" ? teacherNav : studentNav;
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
@@ -109,6 +118,24 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const dashboardPath = `/${role}`;
   const coursesPath = role === "admin" ? "/admin/courses" : `/${role}/courses`;
   const settingsPath = `/${role}/settings`;
+  const isStudent = role === "student";
+
+  const isProfileInfoIncomplete = Boolean(
+    profile &&
+      (!profile.name?.trim() ||
+        !profile.email?.trim() ||
+        !profile.bio?.trim() ||
+        !profile.phone?.trim() ||
+        !profile.location?.trim()),
+  );
+
+  const isProfessionalSettingsIncomplete = Boolean(
+    profile &&
+      (!profile.professional?.headline?.trim() ||
+        !profile.professional?.currentRole?.trim() ||
+        !profile.professional?.careerGoals?.trim() ||
+        !profile.professional?.skills?.length),
+  );
 
   useEffect(() => {
     let active = true;
@@ -226,6 +253,39 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (!isStudent || !profile?._id) {
+      setProfilePromptOpen(false);
+      return;
+    }
+
+    const shouldPrompt =
+      (profile.loginCount || 0) >= 2 &&
+      (isProfileInfoIncomplete || isProfessionalSettingsIncomplete);
+
+    if (!shouldPrompt) {
+      setProfilePromptOpen(false);
+      return;
+    }
+
+    const sessionKey = `tesbinn-profile-prompt:${profile._id}:${profile.loginCount || 0}`;
+    if (window.sessionStorage.getItem(sessionKey) === "shown") {
+      return;
+    }
+
+    window.sessionStorage.setItem(sessionKey, "shown");
+    setProfilePromptOpen(true);
+  }, [
+    isProfessionalSettingsIncomplete,
+    isProfileInfoIncomplete,
+    isStudent,
+    location.pathname,
+    navigate,
+    profile?._id,
+    profile?.loginCount,
+    settingsPath,
+  ]);
+
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.readAt) {
       await markNotificationRead(notification._id);
@@ -240,6 +300,11 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
     navigate("/login");
   };
 
+  const handleOpenSettings = () => {
+    setProfilePromptOpen(false);
+    navigate(settingsPath);
+  };
+
   const mobileNavItems = [
     { icon: Home, label: "Home", href: `/${role}` },
     { icon: BookOpen, label: "Courses", href: `/${role}/courses` },
@@ -249,6 +314,34 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
   return (
     <div className="min-h-screen bg-background flex overflow-x-hidden">
+      <Dialog open={profilePromptOpen} onOpenChange={setProfilePromptOpen}>
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>Complete your profile</DialogTitle>
+            <DialogDescription>
+              Finish your Profile Information and Professional Settings. Do you want to fill them now or later?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3 sm:gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => setProfilePromptOpen(false)}
+            >
+              Later
+            </Button>
+            <Button
+              variant="gradient"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={handleOpenSettings}
+            >
+              Fill now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Desktop Sidebar */}
       <aside
         className={cn(

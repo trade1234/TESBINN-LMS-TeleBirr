@@ -102,6 +102,7 @@ export interface MeResponse {
     email: string;
     role: UserRole;
     status: string;
+    loginCount?: number;
     profileImage?: string;
     bio?: string;
     phone?: string;
@@ -146,6 +147,7 @@ export interface User {
   email: string;
   role: UserRole;
   status: "pending" | "active" | "suspended" | "blocked";
+  loginCount?: number;
   profileImage?: string;
   bio?: string;
   phone?: string;

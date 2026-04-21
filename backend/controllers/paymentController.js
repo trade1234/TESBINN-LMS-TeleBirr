@@ -147,8 +147,8 @@ const parseNotifyParamsFromPath = (req) => {
 
 const getPayloadSource = ({ bodyPayload, queryPayload, pathPayload }) => {
   if (hasKeys(bodyPayload)) return "body";
-  if (hasKeys(queryPayload)) return "query";
   if (hasKeys(pathPayload)) return "path";
+  if (hasKeys(queryPayload)) return "query";
   return "empty";
 };
 
@@ -423,10 +423,10 @@ exports.telebirrNotify = asyncHandler(async (req, res) => {
   const pathPayload = parseNotifyParamsFromPath(req);
   const source = getPayloadSource({ bodyPayload, queryPayload, pathPayload });
   const requestPayload = hasKeys(bodyPayload)
-    ? bodyPayload
-    : hasKeys(queryPayload)
-      ? queryPayload
-      : pathPayload;
+    ? { ...pathPayload, ...queryPayload, ...bodyPayload }
+    : hasKeys(pathPayload)
+      ? { ...queryPayload, ...pathPayload }
+      : queryPayload;
 
   console.log("[Telebirr] notify request", {
     method: req.method,

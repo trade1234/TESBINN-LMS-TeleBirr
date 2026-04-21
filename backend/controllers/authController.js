@@ -221,8 +221,11 @@ exports.login = asyncHandler(async (req, res, next) => {
     user.lockUntil = undefined;
   }
 
-  // Update last login
+  // Backfill older accounts: an existing lastLogin means this is at least their second successful login.
+  const previousLoginCount = Number.isFinite(user.loginCount) ? user.loginCount : 0;
+  const effectiveLoginCount = Math.max(previousLoginCount, user.lastLogin ? 1 : 0);
   user.lastLogin = Date.now();
+  user.loginCount = effectiveLoginCount + 1;
   await user.save({ validateBeforeSave: false });
 
   sendTokenResponse(user, 200, res);
