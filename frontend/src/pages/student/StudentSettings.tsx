@@ -219,14 +219,6 @@ const StudentSettings = () => {
               Update your profile, professional presence, and learning preferences.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleReset}>
-              Cancel
-            </Button>
-            <Button variant="gradient" disabled={isSaving || isLoading} onClick={handleSave}>
-              {isSaving ? "Saving..." : "Save changes"}
-            </Button>
-          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -319,6 +311,15 @@ const StudentSettings = () => {
                   }
                   placeholder="Tell instructors what you are currently working on."
                 />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled={isSaving || isLoading} onClick={handleReset}>
+                  Cancel
+                </Button>
+                <Button variant="gradient" disabled={isSaving || isLoading} onClick={handleSave}>
+                  {isSaving ? "Saving..." : "Save changes"}
+                </Button>
               </div>
             </div>
 
@@ -516,6 +517,15 @@ const StudentSettings = () => {
                   />
                 </div>
               </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled={isSaving || isLoading} onClick={handleReset}>
+                  Cancel
+                </Button>
+                <Button variant="gradient" disabled={isSaving || isLoading} onClick={handleSave}>
+                  {isSaving ? "Saving..." : "Save changes"}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -563,6 +573,14 @@ const StudentSettings = () => {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm">Reset password</Button>
                 <Button variant="ghost" size="sm">Manage devices</Button>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled={isSaving || isLoading} onClick={handleReset}>
+                  Cancel
+                </Button>
+                <Button variant="gradient" disabled={isSaving || isLoading} onClick={handleSave}>
+                  {isSaving ? "Saving..." : "Save changes"}
+                </Button>
               </div>
             </div>
 
@@ -638,6 +656,14 @@ const StudentSettings = () => {
                     }
                   />
                 </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled={isSaving || isLoading} onClick={handleReset}>
+                  Cancel
+                </Button>
+                <Button variant="gradient" disabled={isSaving || isLoading} onClick={handleSave}>
+                  {isSaving ? "Saving..." : "Save changes"}
+                </Button>
               </div>
             </div>
 
@@ -720,6 +746,14 @@ const StudentSettings = () => {
                     }
                   />
                 </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled={isSaving || isLoading} onClick={handleReset}>
+                  Cancel
+                </Button>
+                <Button variant="gradient" disabled={isSaving || isLoading} onClick={handleSave}>
+                  {isSaving ? "Saving..." : "Save changes"}
+                </Button>
               </div>
             </div>
           </div>

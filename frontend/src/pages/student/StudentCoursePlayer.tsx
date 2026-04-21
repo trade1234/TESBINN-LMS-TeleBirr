@@ -3,6 +3,14 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Layers, Play, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api } from "@/lib/api";
@@ -49,6 +57,9 @@ const StudentCoursePlayer = () => {
   const [ratingValue, setRatingValue] = useState(0);
   const [ratingComment, setRatingComment] = useState("");
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [isRatingPromptOpen, setIsRatingPromptOpen] = useState(false);
+  const [hasPromptedForRating, setHasPromptedForRating] = useState(false);
+  const ratingSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -144,6 +155,18 @@ const StudentCoursePlayer = () => {
     setRatingValue(enrollment.rating || 0);
     setRatingComment(enrollment.review || "");
   }, [enrollment]);
+
+  useEffect(() => {
+    if (!enrollment) return;
+    if (enrollment.rating) {
+      setIsRatingPromptOpen(false);
+      return;
+    }
+    if (enrollment.completionStatus === "completed" && !hasPromptedForRating) {
+      setIsRatingPromptOpen(true);
+      setHasPromptedForRating(true);
+    }
+  }, [enrollment, hasPromptedForRating]);
 
   const completedSet = useMemo<Set<LessonKey>>(() => {
     const set = new Set<LessonKey>();
@@ -484,6 +507,7 @@ const StudentCoursePlayer = () => {
         { rating: ratingValue, review: ratingComment.trim() || undefined },
       );
       setEnrollment(res.data.data);
+      setIsRatingPromptOpen(false);
       toast({ title: "Thanks for your feedback!" });
     } catch (err: any) {
       const message =
@@ -760,8 +784,31 @@ const StudentCoursePlayer = () => {
     ? getLessonDownloadName(currentLessonEntry.lesson)
     : "lesson";
 
+  const focusRatingSection = () => {
+    setIsRatingPromptOpen(false);
+    ratingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <DashboardLayout role="student">
+      <Dialog open={isRatingPromptOpen} onOpenChange={setIsRatingPromptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rate this course</DialogTitle>
+            <DialogDescription>
+              You completed the course. Share a quick rating to help other learners.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRatingPromptOpen(false)}>
+              Later
+            </Button>
+            <Button variant="gradient" onClick={focusRatingSection}>
+              Rate now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -842,7 +889,7 @@ const StudentCoursePlayer = () => {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-border p-5 space-y-3">
+              <div ref={ratingSectionRef} className="rounded-2xl border border-border p-5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">Rate this course</p>
