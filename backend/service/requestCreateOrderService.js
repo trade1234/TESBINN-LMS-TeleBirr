@@ -128,9 +128,9 @@ function createRawRequest(prepayId, configOverride) {
   const map = {
     appid: config.merchantAppId,
     merch_code: config.merchantCode,
-    nonce_str: tools.createNonceStr(), // tools code you can download form demo
+    nonce_str: tools.createNonceStr(),
     prepay_id: prepayId,
-    timestamp: tools.createTimeStamp(), // tools code you can download form demo
+    timestamp: tools.createTimeStamp(),
   };
   const sign = tools.signRequestObject(map, config.privateKey);
   const params = new URLSearchParams({
@@ -147,6 +147,11 @@ function createRawRequest(prepayId, configOverride) {
 
 function createCheckoutUrl(prepayId, configOverride) {
   const config = configOverride || configModule;
+
+  // ✅ FIX 2: Mini/InApp does not use a checkout URL
+  // Payment is handled via startPay rawRequest on the frontend
+  if (config.tradeType === "InApp") return null;
+
   const rawRequest = createRawRequest(prepayId, config);
   const base = config.webBaseUrl || "";
   const separator = base.includes("?")

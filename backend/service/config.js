@@ -85,7 +85,9 @@ const resolveChannelConfig = (channelInput) => {
     readChannelValue(channel, "TRADE_TYPE", "TELEBIRR_TRADE_TYPE") ||
     (channel === "mini" ? "InApp" : "Checkout");
   const includeRedirect =
-    process.env.TELEBIRR_INCLUDE_REDIRECT === "true" || tradeType !== "InApp";
+  tradeType === "InApp"
+    ? false
+    : process.env.TELEBIRR_INCLUDE_REDIRECT === "true";
   const otherParams =
     readChannelValue(channel, "OTHER_PARAMS", "TELEBIRR_OTHER_PARAMS") ||
     (tradeType === "InApp" ? "" : "&version=1.0&trade_type=Checkout");
