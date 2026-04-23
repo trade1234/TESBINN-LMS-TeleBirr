@@ -122,11 +122,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
   const isProfileInfoIncomplete = Boolean(
     profile &&
-      (!profile.name?.trim() ||
-        !profile.email?.trim() ||
-        !profile.bio?.trim() ||
-        !profile.phone?.trim() ||
-        !profile.location?.trim()),
+      (!profile.name?.trim() || !profile.phone?.trim() || !profile.email?.trim()),
   );
 
   const isProfessionalSettingsIncomplete = Boolean(

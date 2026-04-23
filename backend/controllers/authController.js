@@ -3,6 +3,7 @@ const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
 const sendEmail = require('../utils/sendEmail');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
 
 const toPositiveInt = (value, fallback) => {
   const parsed = parseInt(value, 10);
@@ -15,6 +16,7 @@ const ACCOUNT_LOCK_SECOND_DURATION_HOURS = toPositiveInt(
   process.env.ACCOUNT_LOCK_SECOND_DURATION_HOURS,
   24
 );
+const GOOGLE_AUTH_MODES = new Set(['login', 'register']);
 
 const durationToSeconds = (duration) => {
   if (typeof duration === 'number') return duration;
@@ -120,6 +122,68 @@ const buildUserUpdatePayload = (payload) => {
   return updates;
 };
 
+const getGoogleClientIds = () => {
+  const rawValues = [
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+    process.env.VITE_GOOGLE_CLIENT_ID
+  ];
+
+  return [...new Set(
+    rawValues
+      .flatMap((value) => String(value || '').split(','))
+      .map((value) => value.trim())
+      .filter(Boolean)
+  )];
+};
+
+const getPrimaryGoogleClientId = () => getGoogleClientIds()[0] || '';
+
+const getGoogleClient = () => {
+  const clientIds = getGoogleClientIds();
+  if (!clientIds.length) {
+    return null;
+  }
+
+  return new OAuth2Client();
+};
+
+const decodeJwtPayload = (token) => {
+  const parts = String(token || '').split('.');
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch (error) {
+    return null;
+  }
+};
+
+const normalizeGooglePayload = (payload) => ({
+  email: String(payload?.email || '').trim().toLowerCase(),
+  name: String(payload?.name || '').trim(),
+  picture: typeof payload?.picture === 'string' ? payload.picture.trim() : '',
+  sub: String(payload?.sub || '').trim(),
+  emailVerified: payload?.email_verified === true
+});
+
+const finalizeSuccessfulAuth = async (user, res, statusCode = 200) => {
+  if (user.loginAttempts || user.lockUntil) {
+    user.loginAttempts = 0;
+    user.lockUntil = undefined;
+  }
+
+  const previousLoginCount = Number.isFinite(user.loginCount) ? user.loginCount : 0;
+  const effectiveLoginCount = Math.max(previousLoginCount, user.lastLogin ? 1 : 0);
+  user.lastLogin = Date.now();
+  user.loginCount = effectiveLoginCount + 1;
+  await user.save({ validateBeforeSave: false });
+
+  sendTokenResponse(user, statusCode, res);
+};
+
 
 // @desc    Register user
 // @route   POST /api/v1/auth/register
@@ -220,15 +284,129 @@ exports.login = asyncHandler(async (req, res, next) => {
     user.loginAttempts = 0;
     user.lockUntil = undefined;
   }
+  await finalizeSuccessfulAuth(user, res, 200);
+});
 
-  // Backfill older accounts: an existing lastLogin means this is at least their second successful login.
-  const previousLoginCount = Number.isFinite(user.loginCount) ? user.loginCount : 0;
-  const effectiveLoginCount = Math.max(previousLoginCount, user.lastLogin ? 1 : 0);
-  user.lastLogin = Date.now();
-  user.loginCount = effectiveLoginCount + 1;
-  await user.save({ validateBeforeSave: false });
+// @desc    Google sign in / sign up
+// @route   POST /api/v1/auth/google
+// @access  Public
+exports.googleAuth = asyncHandler(async (req, res, next) => {
+  const credential = String(req.body.credential || '').trim();
+  const requestedMode = String(req.body.mode || 'login').trim().toLowerCase();
+  const mode = GOOGLE_AUTH_MODES.has(requestedMode) ? requestedMode : 'login';
+  const googleClientIds = getGoogleClientIds();
+  const frontendClientId = String(req.body.clientId || '').trim();
+  const googleClient = getGoogleClient();
 
-  sendTokenResponse(user, 200, res);
+  if (!credential) {
+    return next(new ErrorResponse('Google credential is required', 400));
+  }
+
+  if (!googleClientIds.length || !googleClient) {
+    return next(new ErrorResponse('Google sign-in is not configured on the server', 503));
+  }
+
+  let ticket;
+
+  try {
+    ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: googleClientIds
+    });
+  } catch (error) {
+    const unverifiedPayload = decodeJwtPayload(credential);
+    const tokenAudience = String(unverifiedPayload?.aud || '').trim();
+
+    if (frontendClientId && !googleClientIds.includes(frontendClientId)) {
+      return next(
+        new ErrorResponse(
+          'Google client ID mismatch between frontend and backend configuration.',
+          401
+        )
+      );
+    }
+
+    if (tokenAudience && !googleClientIds.includes(tokenAudience)) {
+      return next(
+        new ErrorResponse(
+          'Google token audience does not match the configured client ID.',
+          401
+        )
+      );
+    }
+
+    return next(
+      new ErrorResponse(
+        'Unable to verify Google identity token with Google. The server could not reach Google verification services. Allow outbound HTTPS to www.googleapis.com and oauth2.googleapis.com, then try again.',
+        502
+      )
+    );
+  }
+
+  const payload = normalizeGooglePayload(ticket.getPayload());
+
+  if (!payload.email || !payload.sub || !payload.emailVerified) {
+    return next(new ErrorResponse('Google account email could not be verified', 401));
+  }
+
+  const user = await User.findOne({
+    $or: [
+      { email: payload.email },
+      { googleId: payload.sub }
+    ]
+  }).select('+loginAttempts +lockUntil +tokenVersion');
+
+  if (!user && mode === 'login') {
+    return next(new ErrorResponse('No TESBINN account is linked to this Google email. Please sign up first.', 404));
+  }
+
+  let authUser = user;
+
+  if (!authUser) {
+    authUser = await User.create({
+      name: payload.name || payload.email.split('@')[0],
+      email: payload.email,
+      password: crypto.randomBytes(32).toString('hex'),
+      role: 'student',
+      status: 'active',
+      googleId: payload.sub,
+      profileImage: payload.picture || undefined
+    });
+  } else {
+    if (authUser.status !== 'active') {
+      return next(
+        new ErrorResponse(
+          'Your account is not active. Please contact support for assistance.',
+          401
+        )
+      );
+    }
+
+    if (!authUser.googleId) {
+      authUser.googleId = payload.sub;
+    }
+
+    if (!authUser.profileImage && payload.picture) {
+      authUser.profileImage = payload.picture;
+    }
+  }
+
+  await finalizeSuccessfulAuth(authUser, res, user ? 200 : 201);
+});
+
+// @desc    Get Google client config
+// @route   GET /api/v1/auth/google/config
+// @access  Public
+exports.getGoogleClientConfig = asyncHandler(async (req, res) => {
+  const clientId = getPrimaryGoogleClientId();
+
+  res.status(200).json({
+    success: true,
+    data: {
+      enabled: Boolean(clientId),
+      clientId: clientId || null
+    }
+  });
 });
 
 // @desc    Get current logged in user

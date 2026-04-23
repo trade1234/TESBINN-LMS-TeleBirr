@@ -94,6 +94,14 @@ export interface LoginResponse {
   role: UserRole;
 }
 
+export interface GoogleAuthConfigResponse {
+  success: boolean;
+  data: {
+    enabled: boolean;
+    clientId: string | null;
+  };
+}
+
 export interface MeResponse {
   success: boolean;
   data: {

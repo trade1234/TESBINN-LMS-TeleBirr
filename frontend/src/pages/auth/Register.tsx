@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import Logo from "@/components/layout/Logo";
+import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -26,6 +27,18 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const handleAuthSuccess = (response: LoginResponse) => {
+    authStorage.setToken(response.token);
+    authStorage.setRole(response.role);
+
+    toast({
+      title: "Account created!",
+      description: "Welcome to TESBINN! Start exploring courses.",
+    });
+    navigate("/student");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
@@ -342,6 +355,24 @@ const Register = () => {
               )}
             </Button>
           </form>
+
+          <div className="mt-6 space-y-3">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background px-4 text-muted-foreground">Or continue with</span>
+              </div>
+            </div>
+
+            <GoogleAuthButton
+              mode="register"
+              disabled={role !== "student"}
+              disabledReason="Google sign-up currently creates student accounts only."
+              onSuccess={handleAuthSuccess}
+            />
+          </div>
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
             Already have an account?{" "}

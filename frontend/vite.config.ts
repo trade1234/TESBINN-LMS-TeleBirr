@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BUILD_BASE || "/",
     server: {
       host: "::",
-      port: 8080,
+      port: 3000,
       proxy: {
         "/api": {
           target: getProxyTarget(),

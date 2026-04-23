@@ -3,6 +3,8 @@ const express = require('express');
 const {
   register,
   login,
+  googleAuth,
+  getGoogleClientConfig,
   getMe,
   updateDetails,
   updateSettings,
@@ -21,6 +23,8 @@ const router = express.Router();
 
 router.post('/register', limitRegistrationAttempts, registerValidationRules, validateRequest, register);
 router.post('/login', limitLoginAttemptsByIp, loginValidationRules, validateRequest, login);
+router.post('/google', googleAuth);
+router.get('/google/config', getGoogleClientConfig);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.put('/updatedetails', protect, updateDetails);
