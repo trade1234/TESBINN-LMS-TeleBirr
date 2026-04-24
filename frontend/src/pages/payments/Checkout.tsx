@@ -4,6 +4,7 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { authStorage } from "@/lib/auth";
 import { getSafeImageUrl } from "@/lib/media";
 import type { ApiResponse, Course } from "@/lib/types";
 
@@ -290,6 +291,12 @@ const Checkout = () => {
     let active = true;
     if (!courseId) return;
 
+    const token = authStorage.getToken();
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
     const load = async () => {
       setIsLoading(true);
       setError(null);
@@ -320,6 +327,11 @@ const Checkout = () => {
         }
       } catch (err: any) {
         if (!active) return;
+        if (err?.response?.status === 401 || err?.response?.status === 403) {
+          authStorage.clearAll();
+          navigate("/login");
+          return;
+        }
         if (err?.response?.status === 404) {
           const backendMessage =
             err?.response?.data?.error || err?.response?.data?.message;
@@ -341,7 +353,7 @@ const Checkout = () => {
     return () => {
       active = false;
     };
-  }, [courseId, isMiniChannel]);
+  }, [courseId, isMiniChannel, navigate]);
 
   const handleProceed = async () => {
     setError(null);
