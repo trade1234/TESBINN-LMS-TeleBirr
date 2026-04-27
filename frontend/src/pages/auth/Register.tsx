@@ -15,6 +15,21 @@ import type { LoginResponse } from "@/lib/types";
 
 type UserRole = "student" | "teacher";
 
+const isMiniAppBuild = (import.meta.env.VITE_TELEBIRR_CHANNEL || "").toLowerCase() === "mini";
+
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      error?: string;
+      message?: string;
+    };
+  };
+};
+
+const asApiError = (error: unknown): ApiErrorLike => {
+  return error && typeof error === "object" ? (error as ApiErrorLike) : {};
+};
+
 const Register = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -100,10 +115,11 @@ const Register = () => {
         description: "Welcome to TESBINN! Start exploring courses.",
       });
       navigate("/student");
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiError = asApiError(err);
       const message =
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
+        apiError.response?.data?.error ||
+        apiError.response?.data?.message ||
         "Registration failed. Please try again.";
 
       toast({
@@ -356,23 +372,24 @@ const Register = () => {
             </Button>
           </form>
 
-          <div className="mt-6 space-y-3">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+          {!isMiniAppBuild && (
+            <div className="mt-6 space-y-3">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-background px-4 text-muted-foreground">Or continue with</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background px-4 text-muted-foreground">Or continue with</span>
-              </div>
-            </div>
 
-            <GoogleAuthButton
-              mode="register"
-              disabled={role !== "student"}
-              disabledReason="Google sign-up currently creates student accounts only."
-              onSuccess={handleAuthSuccess}
-            />
-          </div>
+              <GoogleAuthButton
+                mode="register"
+                disabled={role !== "student"}
+                onSuccess={handleAuthSuccess}
+              />
+            </div>
+          )}
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
             Already have an account?{" "}

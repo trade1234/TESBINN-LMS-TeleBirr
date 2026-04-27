@@ -27,8 +27,8 @@ type TelebirrAuthTokenData = {
 type MiniAppBridge = {
   startPay?: (options: {
     rawRequest: string;
-    success?: (result: { resultCode?: string }) => void;
-    fail?: (error: { message?: string; errorMessage?: string }) => void;
+    success?: (result: MiniAppPaymentResult) => void;
+    fail?: (error: MiniAppPaymentResult) => void;
   }) => void;
   tradePay?: (options: {
     rawRequest?: string;
@@ -36,18 +36,53 @@ type MiniAppBridge = {
     orderStr?: string;
     sign?: string;
     extendParam?: string;
-    success?: (result: { resultCode?: string }) => void;
-    fail?: (error: { message?: string; errorMessage?: string }) => void;
+    success?: (result: MiniAppPaymentResult) => void;
+    fail?: (error: MiniAppPaymentResult) => void;
   }) => void;
   native?: (
     method: string,
     options: Record<string, string>
-  ) => Promise<{ resultCode?: string; token?: string }>;
+  ) => Promise<MiniAppPaymentResult & { token?: string }>;
   getAuthCode?: (options: {
     scopes: string[];
     success?: (result: { authCode?: string; token?: string }) => void;
     fail?: (error: { message?: string; errorMessage?: string }) => void;
   }) => void;
+};
+
+type MiniAppPaymentResult = {
+  resultCode?: string | number;
+  result_code?: string | number;
+  code?: string | number;
+  status?: string | number;
+  tradeStatus?: string;
+  trade_status?: string;
+  orderStatus?: string;
+  order_status?: string;
+  errMsg?: string;
+  message?: string;
+  errorMessage?: string;
+};
+
+type PaymentErrorLike = {
+  errMsg?: string;
+  message?: string;
+  errorMessage?: string;
+  response?: {
+    status?: number;
+    data?: {
+      error?: string;
+      message?: string;
+    };
+  };
+};
+
+type MiniAppPaymentIdentity = {
+  openId?: string | null;
+  identityId?: string | null;
+  identityType?: string | null;
+  walletIdentityId?: string | null;
+  identifier?: string | null;
 };
 
 const telebirrChannel = (import.meta.env.VITE_TELEBIRR_CHANNEL || "h5").toLowerCase();
@@ -74,6 +109,99 @@ const getRawRequestParam = (rawRequest: string, key: string) => {
   return params.get(key);
 };
 
+const getEncodedRawRequestParam = (rawRequest: string, key: string) => {
+  const pair = rawRequest
+    .trim()
+    .split("&")
+    .find((item) => item.split("=")[0] === key);
+  return pair ? pair.slice(key.length + 1) : null;
+};
+
+const asPaymentError = (error: unknown): PaymentErrorLike => {
+  return error && typeof error === "object" ? (error as PaymentErrorLike) : {};
+};
+
+const getPaymentErrorMessage = (error: unknown, fallback: string) => {
+  const paymentError = asPaymentError(error);
+  const rawError =
+    error && typeof error === "object" ? JSON.stringify(error) : String(error || "");
+
+  return (
+    paymentError.response?.data?.error ||
+    paymentError.response?.data?.message ||
+    paymentError.errMsg ||
+    paymentError.message ||
+    paymentError.errorMessage ||
+    (rawError && rawError !== "{}" ? rawError : "") ||
+    fallback
+  );
+};
+
+const getMiniAppPaymentStatus = (result: MiniAppPaymentResult = {}) => {
+  return String(
+    result.resultCode ??
+      result.result_code ??
+      result.code ??
+      result.status ??
+      result.tradeStatus ??
+      result.trade_status ??
+      result.orderStatus ??
+      result.order_status ??
+      result.errMsg ??
+      result.message ??
+      result.errorMessage ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
+};
+
+const isMiniAppPaymentSuccess = (
+  result: MiniAppPaymentResult | undefined,
+  source: "success" | "fail"
+) => {
+  const status = getMiniAppPaymentStatus(result);
+
+  if (!status) {
+    return source === "success";
+  }
+
+  if (
+    status === "0" ||
+    status === "1" ||
+    status === "0000" ||
+    status === "9000" ||
+    status === "8000" ||
+    status === "6004" ||
+    status === "success" ||
+    status === "pay_success" ||
+    status === "completed" ||
+    status === "complete" ||
+    status === "paid" ||
+    status.includes(":ok") ||
+    status.includes("success")
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+const isMiniAppPaymentCancelled = (result: MiniAppPaymentResult = {}) => {
+  const status = getMiniAppPaymentStatus(result);
+  return (
+    status.includes("cancel") ||
+    status.includes("close") ||
+    status.includes("abort") ||
+    status === "-1"
+  );
+};
+
+const isMiniAppPaymentFinalFailure = (result: MiniAppPaymentResult = {}) => {
+  const status = getMiniAppPaymentStatus(result);
+  return status === "4000" || status.includes("fail") || status.includes("error");
+};
+
 const getMiniAppAccessToken = async (bridge: MiniAppBridge, rawRequest: string) => {
   const appId = getRawRequestParam(rawRequest, "appid");
   if (!appId) {
@@ -87,25 +215,17 @@ const getMiniAppAccessToken = async (bridge: MiniAppBridge, rawRequest: string) 
       const tokenResponse = await bridge.native("getMiniAppToken", { appId });
       token = tokenResponse?.token || null;
     } catch (error) {
-      console.warn("[Telebirr] getMiniAppToken is not supported by this runtime");
+      throw new Error(
+        getPaymentErrorMessage(
+          error,
+          "Unable to get Mini App access token from the SuperApp."
+        )
+      );
     }
   }
 
-  if (!token && bridge.getAuthCode) {
-    token = await new Promise<string | null>((resolve, reject) => {
-      bridge.getAuthCode?.({
-        scopes: ["AUTH_USER"],
-        success: (result) => resolve(result?.token || result?.authCode || null),
-        fail: (error) =>
-          reject(
-            new Error(
-              error?.message ||
-                error?.errorMessage ||
-                "Mini App auth code request failed."
-            )
-          ),
-      });
-    });
+  if (!bridge.native) {
+    throw new Error("Mini App native bridge is unavailable. Open this page inside the SuperApp.");
   }
 
   if (!token) {
@@ -181,23 +301,35 @@ const loadMiniAppSdk = async () => {
 const startMiniAppPayment = (
   bridge: MiniAppBridge,
   request: string,
+  identity: MiniAppPaymentIdentity | null,
   callbacks: {
-    onSuccess: (result: { resultCode?: string }) => void;
-    onFail: (error: { message?: string; errorMessage?: string }) => void;
+    onSuccess: (result: MiniAppPaymentResult) => void;
+    onFail: (error: MiniAppPaymentResult) => void;
   }
 ) => {
   const normalizedRequest = request.trim();
   const tradeNO = getRawRequestParam(normalizedRequest, "prepay_id") || "";
   const sign = getRawRequestParam(normalizedRequest, "sign") || "";
+  const encodedSign = getEncodedRawRequestParam(normalizedRequest, "sign") || sign;
+  const identityPayload: Record<string, string> = {};
+  if (identity?.openId) identityPayload.openId = identity.openId;
+  if (identity?.identityId) identityPayload.identityId = identity.identityId;
+  if (identity?.identityType) identityPayload.identityType = identity.identityType;
+  if (identity?.walletIdentityId) identityPayload.walletIdentityId = identity.walletIdentityId;
+  if (identity?.identifier) identityPayload.identifier = identity.identifier;
   let settled = false;
-  const settleSuccess = (result: { resultCode?: string }) => {
+  const settleSuccess = (result: MiniAppPaymentResult) => {
     if (settled) return;
     settled = true;
     callbacks.onSuccess(result);
   };
-  const settleFail = (error: { message?: string; errorMessage?: string }) => {
+  const settleFail = (error: MiniAppPaymentResult) => {
     if (settled) return;
     settled = true;
+    if (typeof callbacks.onFail !== "function") {
+      console.error("[Telebirr] Mini app payment failure callback is not configured", error);
+      return;
+    }
     callbacks.onFail(error);
   };
   const timeoutId = window.setTimeout(() => {
@@ -207,17 +339,103 @@ const startMiniAppPayment = (
     });
   }, 10000);
 
-  const wrapSuccess = (result: { resultCode?: string }) => {
+  const wrapSuccess = (result: MiniAppPaymentResult) => {
     window.clearTimeout(timeoutId);
     settleSuccess(result);
   };
-  const wrapFail = (error: { message?: string; errorMessage?: string }) => {
+  const wrapFail = (error: MiniAppPaymentResult) => {
     window.clearTimeout(timeoutId);
+    if (isMiniAppPaymentSuccess(error, "fail")) {
+      settleSuccess(error);
+      return;
+    }
     settleFail(error);
   };
 
+  if (bridge.native) {
+    const nativeTradePayPayloads: Record<string, string>[] = [
+      { tradeNO },
+      { orderStr: normalizedRequest },
+      {
+        tradeNO,
+        orderStr: normalizedRequest,
+        rawRequest: normalizedRequest,
+        sign,
+        extendParam: "",
+        ...identityPayload,
+      },
+      {
+        tradeNO,
+        orderStr: normalizedRequest,
+        rawRequest: normalizedRequest,
+        sign: encodedSign,
+        extendParam: "",
+        ...identityPayload,
+      },
+      {
+        tradeNO,
+        ...identityPayload,
+      },
+      {
+        orderStr: normalizedRequest,
+        ...identityPayload,
+      },
+    ].filter((payload) => Object.values(payload).every(Boolean));
+
+    const runNativeTradePay = async () => {
+      let lastError: unknown = null;
+
+      for (const payload of nativeTradePayPayloads) {
+        try {
+          const result = await bridge.native?.("tradePay", payload);
+          if (result && isMiniAppPaymentFinalFailure(result)) {
+            lastError = result;
+            continue;
+          }
+          window.clearTimeout(timeoutId);
+          wrapSuccess(result || {});
+          return;
+        } catch (error: unknown) {
+          if (isMiniAppPaymentSuccess(asPaymentError(error), "fail")) {
+            window.clearTimeout(timeoutId);
+            wrapSuccess(asPaymentError(error));
+            return;
+          }
+          lastError = error;
+        }
+      }
+
+      try {
+        const fallbackResult = await bridge.native?.("startPay", {
+          rawRequest: normalizedRequest,
+          businessType: "BuyGoods",
+          ...identityPayload,
+        });
+        window.clearTimeout(timeoutId);
+        wrapSuccess(fallbackResult || {});
+      } catch (startPayError: unknown) {
+        window.clearTimeout(timeoutId);
+        if (isMiniAppPaymentSuccess(asPaymentError(startPayError), "fail")) {
+          wrapSuccess(asPaymentError(startPayError));
+          return;
+        }
+
+        wrapFail({
+          message: getPaymentErrorMessage(
+            startPayError,
+            getPaymentErrorMessage(lastError, "Mini app payment failed.")
+          ),
+        });
+      }
+    };
+
+    void runNativeTradePay();
+    return true;
+  }
+
   if (bridge.tradePay) {
     bridge.tradePay({
+      rawRequest: normalizedRequest,
       tradeNO,
       orderStr: normalizedRequest,
       sign,
@@ -225,41 +443,6 @@ const startMiniAppPayment = (
       success: wrapSuccess,
       fail: wrapFail,
     });
-    return true;
-  }
-
-  if (bridge.native) {
-    bridge
-      .native("tradePay", {
-        tradeNO,
-        orderStr: normalizedRequest,
-        sign,
-        extendParam: "",
-      })
-      .then((result) => {
-        window.clearTimeout(timeoutId);
-        wrapSuccess(result);
-      })
-      .catch(async (tradePayError: any) => {
-        try {
-          const fallbackResult = await bridge.native?.("startPay", {
-            rawRequest: normalizedRequest,
-            businessType: "BuyGoods",
-          });
-          window.clearTimeout(timeoutId);
-          wrapSuccess(fallbackResult || {});
-        } catch (startPayError: any) {
-          window.clearTimeout(timeoutId);
-          wrapFail({
-            message:
-              startPayError?.message ||
-              tradePayError?.message ||
-              startPayError?.errorMessage ||
-              tradePayError?.errorMessage ||
-              "Mini app payment failed.",
-          });
-        }
-      });
     return true;
   }
 
@@ -325,25 +508,21 @@ const Checkout = () => {
         } else if (!orderData.checkoutUrl) {
           setError("Unable to start payment. Please try again.");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!active) return;
-        if (err?.response?.status === 401 || err?.response?.status === 403) {
+        const paymentError = asPaymentError(err);
+        if (paymentError.response?.status === 401 || paymentError.response?.status === 403) {
           authStorage.clearAll();
           navigate("/login");
           return;
         }
-        if (err?.response?.status === 404) {
+        if (paymentError.response?.status === 404) {
           const backendMessage =
-            err?.response?.data?.error || err?.response?.data?.message;
+            paymentError.response?.data?.error || paymentError.response?.data?.message;
           setError(backendMessage || "Course not found or not available for purchase.");
           return;
         }
-        const message =
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Unable to start payment.";
-        setError(message);
+        setError(getPaymentErrorMessage(err, "Unable to start payment."));
       } finally {
         if (active) setIsLoading(false);
       }
@@ -366,10 +545,9 @@ const Checkout = () => {
 
       try {
         await loadMiniAppSdk();
-      } catch (sdkError: any) {
+      } catch (sdkError: unknown) {
         setError(
-          sdkError?.message ||
-            "Failed to load the Mini App payment SDK."
+          getPaymentErrorMessage(sdkError, "Failed to load the Mini App payment SDK.")
         );
         return;
       }
@@ -382,23 +560,19 @@ const Checkout = () => {
         return;
       }
 
+      let authIdentity: MiniAppPaymentIdentity | null = null;
       try {
         const accessToken = await getMiniAppAccessToken(bridge, rawRequest);
-        if (accessToken) {
-          await exchangeMiniAppAccessToken(accessToken);
-        }
-      } catch (tokenError: any) {
-        console.warn("[Telebirr] Mini App access token request failed", {
-          message:
-            tokenError?.message ||
-            "Failed to obtain Mini App access token.",
-        });
+        authIdentity = await exchangeMiniAppAccessToken(accessToken);
+      } catch (tokenError: unknown) {
+        setError(getPaymentErrorMessage(tokenError, "Failed to obtain Mini App access token."));
+        return;
       }
 
       setIsRedirecting(true);
-      const started = startMiniAppPayment(bridge, rawRequest, {
+      const started = startMiniAppPayment(bridge, rawRequest, authIdentity, {
         onSuccess: (result) => {
-          if (result?.resultCode === "1") {
+          if (isMiniAppPaymentSuccess(result, "success")) {
             navigate(
               `/payment/return?courseId=${encodeURIComponent(courseId || "")}${merchOrderId ? `&merch_order_id=${encodeURIComponent(merchOrderId)}` : ""}`
             );
@@ -408,11 +582,20 @@ const Checkout = () => {
           setIsRedirecting(false);
           setError("Mini app payment was cancelled or did not complete.");
         },
-        fail: (tradeError) => {
+        onFail: (tradeError) => {
+          if (isMiniAppPaymentSuccess(tradeError, "fail")) {
+            navigate(
+              `/payment/return?courseId=${encodeURIComponent(courseId || "")}${merchOrderId ? `&merch_order_id=${encodeURIComponent(merchOrderId)}` : ""}`
+            );
+            return;
+          }
+
           const message =
-            tradeError?.message ||
-            tradeError?.errorMessage ||
-            "Mini app payment failed.";
+            isMiniAppPaymentCancelled(tradeError)
+              ? "Mini app payment was cancelled or did not complete."
+              : tradeError?.message ||
+                tradeError?.errorMessage ||
+                "Mini app payment failed.";
           setIsRedirecting(false);
           setError(message);
         },

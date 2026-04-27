@@ -12,6 +12,23 @@ import { api } from "@/lib/api";
 import { authStorage } from "@/lib/auth";
 import type { LoginResponse } from "@/lib/types";
 
+const isMiniAppBuild = (import.meta.env.VITE_TELEBIRR_CHANNEL || "").toLowerCase() === "mini";
+
+type ApiErrorLike = {
+  response?: {
+    status?: number;
+    headers?: Record<string, string | number | undefined>;
+    data?: {
+      error?: string;
+      message?: string;
+    };
+  };
+};
+
+const asApiError = (error: unknown): ApiErrorLike => {
+  return error && typeof error === "object" ? (error as ApiErrorLike) : {};
+};
+
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -89,9 +106,10 @@ const Login = () => {
         password,
       });
       handleAuthSuccess(res.data);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const headers = err?.response?.headers || {};
+    } catch (err: unknown) {
+      const apiError = asApiError(err);
+      const status = apiError.response?.status;
+      const headers = apiError.response?.headers || {};
       const remainingHeader = headers["x-ratelimit-remaining"];
       const limitHeader = headers["x-ratelimit-limit"];
       const retryAfterHeader = headers["retry-after"];
@@ -101,8 +119,8 @@ const Login = () => {
       const maxAttempts = Number.isFinite(limit) && limit > 0 ? limit : 10;
 
       const message =
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
+        apiError.response?.data?.error ||
+        apiError.response?.data?.message ||
         "Login failed. Please check your credentials.";
 
       if (status === 429) {
@@ -257,22 +275,24 @@ const Login = () => {
             ) : null}
           </form>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-background text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
+          {!isMiniAppBuild && (
             <div className="mt-6">
-              <GoogleAuthButton mode="login" onSuccess={handleAuthSuccess} />
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-background text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <GoogleAuthButton mode="login" onSuccess={handleAuthSuccess} />
+              </div>
             </div>
-          </div>
+          )}
 
           <p className="mt-8 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}

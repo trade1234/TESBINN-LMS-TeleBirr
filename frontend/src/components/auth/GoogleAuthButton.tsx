@@ -12,6 +12,20 @@ type GoogleAuthButtonProps = {
   onSuccess: (response: LoginResponse) => void;
 };
 
+type ApiErrorLike = {
+  message?: string;
+  response?: {
+    data?: {
+      error?: string;
+      message?: string;
+    };
+  };
+};
+
+const asApiError = (error: unknown): ApiErrorLike => {
+  return error && typeof error === "object" ? (error as ApiErrorLike) : {};
+};
+
 declare global {
   interface Window {
     google?: {
@@ -153,10 +167,11 @@ const GoogleAuthButton = ({
               clientId,
             });
             onSuccess(response.data);
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const apiError = asApiError(error);
             const message =
-              error?.response?.data?.error ||
-              error?.response?.data?.message ||
+              apiError.response?.data?.error ||
+              apiError.response?.data?.message ||
               "Google sign-in could not be completed.";
 
             toast({
@@ -184,14 +199,15 @@ const GoogleAuthButton = ({
           logo_alignment: "left",
         });
         initializedRef.current = true;
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (!active) {
           return;
         }
 
+        const apiError = asApiError(error);
         toast({
           title: "Google sign-in unavailable",
-          description: error?.message || "Failed to load Google sign-in.",
+          description: apiError.message || "Failed to load Google sign-in.",
           variant: "destructive",
         });
       }
@@ -205,6 +221,10 @@ const GoogleAuthButton = ({
   }, [clientId, disabled, isAvailable, mode, onSuccess, toast]);
 
   if (disabled) {
+    const message =
+      disabledReason ||
+      (mode === "register" ? "Google sign-up currently creates student accounts only." : null);
+
     return (
       <div className="space-y-2">
         <button
@@ -214,7 +234,7 @@ const GoogleAuthButton = ({
         >
           Sign {mode === "register" ? "up" : "in"} with Google
         </button>
-        {disabledReason ? <p className="text-xs text-muted-foreground">{disabledReason}</p> : null}
+        {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
       </div>
     );
   }

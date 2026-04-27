@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const backendUrl = env.VITE_BACKEND_URL || env.VITE_API_URL;
   const proxyOverride = env.VITE_PROXY_TARGET;
+  const isMiniBuild = mode === "mini" || env.VITE_TELEBIRR_CHANNEL?.toLowerCase() === "mini";
 
   const resolveOrigin = (value?: string) => {
     if (!value) return undefined;
@@ -41,6 +42,14 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
     resolve: {
       alias: {
+        ...(isMiniBuild
+          ? {
+              "@/components/auth/GoogleAuthButton": path.resolve(
+                __dirname,
+                "./src/components/auth/GoogleAuthButton.mini.tsx"
+              ),
+            }
+          : {}),
         "@": path.resolve(__dirname, "./src"),
       },
     },

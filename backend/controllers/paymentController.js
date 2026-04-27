@@ -190,6 +190,19 @@ const sanitizeTitle = (value) => {
   return raw.replace(/[~`!#$%^*()\-+=|/<>?;:"\[\]{}\\&]/g, " ").replace(/\s+/g, " ").trim();
 };
 
+const getProviderRawRequest = (createOrderResult) => {
+  const bizContent = createOrderResult?.biz_content || {};
+  return (
+    bizContent.raw_request ||
+    bizContent.rawRequest ||
+    bizContent.raw_request_string ||
+    bizContent.rawRequestString ||
+    createOrderResult?.raw_request ||
+    createOrderResult?.rawRequest ||
+    null
+  );
+};
+
 exports.authTelebirrToken = asyncHandler(async (req, res, next) => {
   const { accessToken, channel: requestedChannel } = req.body;
   if (!accessToken || typeof accessToken !== "string") {
@@ -393,7 +406,8 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse("Missing prepay id from payment provider", 400));
   }
 
-  const rawRequest = orderService.createRawRequest(prepayId, telebirrConfig);
+  const providerRawRequest = getProviderRawRequest(createOrderResult);
+  const rawRequest = providerRawRequest || orderService.createRawRequest(prepayId, telebirrConfig);
   const checkoutUrl = orderService.createCheckoutUrl(prepayId, telebirrConfig);
   console.log(`[Telebirr] Checkout URL: ${checkoutUrl}`);
   console.log("[Telebirr] create-order response", {
@@ -401,6 +415,7 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
     tradeType: telebirrConfig.tradeType,
     checkoutUrl,
     rawRequest,
+    rawRequestSource: providerRawRequest ? "provider" : "generated",
     merchOrderId,
     prepayId,
   });
