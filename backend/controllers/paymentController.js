@@ -409,13 +409,17 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
   const providerRawRequest = getProviderRawRequest(createOrderResult);
   const rawRequest = providerRawRequest || orderService.createRawRequest(prepayId, telebirrConfig);
   const checkoutUrl = orderService.createCheckoutUrl(prepayId, telebirrConfig);
+  const rawRequestParams = new URLSearchParams(rawRequest);
   console.log(`[Telebirr] Checkout URL: ${checkoutUrl}`);
   console.log("[Telebirr] create-order response", {
     channel: telebirrConfig.channel,
     tradeType: telebirrConfig.tradeType,
     checkoutUrl,
-    rawRequest,
     rawRequestSource: providerRawRequest ? "provider" : "generated",
+    rawRequestKeys: Array.from(rawRequestParams.keys()),
+    hasRawRequestSign: rawRequestParams.has("sign"),
+    hasRawRequestPrepayId: rawRequestParams.has("prepay_id"),
+    rawRequestLength: rawRequest.length,
     merchOrderId,
     prepayId,
   });
@@ -425,6 +429,7 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
     data: {
       checkoutUrl: isMiniMode ? null : checkoutUrl,
       rawRequest: isMiniMode ? rawRequest : null,
+      rawRequestSource: providerRawRequest ? "provider" : "generated",
       merchOrderId,
       prepayId,
       prepay_id: prepayId,

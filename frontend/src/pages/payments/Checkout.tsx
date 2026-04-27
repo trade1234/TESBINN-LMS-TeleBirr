@@ -11,7 +11,9 @@ import type { ApiResponse, Course } from "@/lib/types";
 type TelebirrCreateOrderData = {
   checkoutUrl?: string;
   rawRequest?: string;
+  rawRequestSource?: "provider" | "generated";
   merchOrderId?: string;
+  prepayId?: string;
 };
 
 type TelebirrAuthTokenData = {
@@ -31,14 +33,13 @@ type MiniAppBridge = {
     fail?: (error: MiniAppPaymentResult) => void;
   }) => void;
   tradePay?: (options: {
-    rawRequest?: string;
-    tradeNO?: string;
-    orderStr?: string;
-    sign?: string;
+    tradeNO: string;
+    orderStr: string;
+    sign: string;
     extendParam?: string;
     success?: (result: MiniAppPaymentResult) => void;
     fail?: (error: MiniAppPaymentResult) => void;
-  }) => void;
+  }) => void | Promise<MiniAppPaymentResult> | MiniAppPaymentResult;
   native?: (
     method: string,
     options: Record<string, string>
@@ -115,6 +116,13 @@ const getEncodedRawRequestParam = (rawRequest: string, key: string) => {
     .split("&")
     .find((item) => item.split("=")[0] === key);
   return pair ? pair.slice(key.length + 1) : null;
+};
+
+const buildMiniAppOrderStr = (rawRequest: string) => {
+  const params = new URLSearchParams(rawRequest.trim());
+  params.delete("sign");
+  params.delete("sign_type");
+  return params.toString();
 };
 
 const asPaymentError = (error: unknown): PaymentErrorLike => {
@@ -311,6 +319,7 @@ const startMiniAppPayment = (
   const tradeNO = getRawRequestParam(normalizedRequest, "prepay_id") || "";
   const sign = getRawRequestParam(normalizedRequest, "sign") || "";
   const encodedSign = getEncodedRawRequestParam(normalizedRequest, "sign") || sign;
+  const orderStr = buildMiniAppOrderStr(normalizedRequest);
   const identityPayload: Record<string, string> = {};
   if (identity?.openId) identityPayload.openId = identity.openId;
   if (identity?.identityId) identityPayload.identityId = identity.identityId;
@@ -352,97 +361,42 @@ const startMiniAppPayment = (
     settleFail(error);
   };
 
-  if (bridge.native) {
-    const nativeTradePayPayloads: Record<string, string>[] = [
-      { tradeNO },
-      { orderStr: normalizedRequest },
-      {
-        tradeNO,
-        orderStr: normalizedRequest,
-        rawRequest: normalizedRequest,
-        sign,
-        extendParam: "",
-        ...identityPayload,
-      },
-      {
-        tradeNO,
-        orderStr: normalizedRequest,
-        rawRequest: normalizedRequest,
-        sign: encodedSign,
-        extendParam: "",
-        ...identityPayload,
-      },
-      {
-        tradeNO,
-        ...identityPayload,
-      },
-      {
-        orderStr: normalizedRequest,
-        ...identityPayload,
-      },
-    ].filter((payload) => Object.values(payload).every(Boolean));
-
-    const runNativeTradePay = async () => {
-      let lastError: unknown = null;
-
-      for (const payload of nativeTradePayPayloads) {
-        try {
-          const result = await bridge.native?.("tradePay", payload);
-          if (result && isMiniAppPaymentFinalFailure(result)) {
-            lastError = result;
-            continue;
-          }
-          window.clearTimeout(timeoutId);
-          wrapSuccess(result || {});
-          return;
-        } catch (error: unknown) {
-          if (isMiniAppPaymentSuccess(asPaymentError(error), "fail")) {
-            window.clearTimeout(timeoutId);
-            wrapSuccess(asPaymentError(error));
-            return;
-          }
-          lastError = error;
-        }
-      }
-
-      try {
-        const fallbackResult = await bridge.native?.("startPay", {
-          rawRequest: normalizedRequest,
-          businessType: "BuyGoods",
-          ...identityPayload,
-        });
-        window.clearTimeout(timeoutId);
-        wrapSuccess(fallbackResult || {});
-      } catch (startPayError: unknown) {
-        window.clearTimeout(timeoutId);
-        if (isMiniAppPaymentSuccess(asPaymentError(startPayError), "fail")) {
-          wrapSuccess(asPaymentError(startPayError));
-          return;
-        }
-
-        wrapFail({
-          message: getPaymentErrorMessage(
-            startPayError,
-            getPaymentErrorMessage(lastError, "Mini app payment failed.")
-          ),
-        });
-      }
-    };
-
-    void runNativeTradePay();
-    return true;
-  }
-
   if (bridge.tradePay) {
-    bridge.tradePay({
-      rawRequest: normalizedRequest,
+    const result = bridge.tradePay({
       tradeNO,
-      orderStr: normalizedRequest,
+      orderStr,
       sign,
       extendParam: "",
       success: wrapSuccess,
       fail: wrapFail,
     });
+
+    if (result && typeof (result as Promise<MiniAppPaymentResult>).then === "function") {
+      void (result as Promise<MiniAppPaymentResult>).then(wrapSuccess).catch(wrapFail);
+    } else if (result && isMiniAppPaymentFinalFailure(result as MiniAppPaymentResult)) {
+      wrapFail(result as MiniAppPaymentResult);
+    }
+
+    return true;
+  }
+
+  if (bridge.native && tradeNO && orderStr && encodedSign) {
+    void bridge
+      .native("tradePay", {
+        tradeNO,
+        orderStr,
+        sign: encodedSign,
+        extendParam: "",
+        ...identityPayload,
+      })
+      .then((result) => {
+        if (result && isMiniAppPaymentFinalFailure(result)) {
+          wrapFail(result);
+          return;
+        }
+        wrapSuccess(result || {});
+      })
+      .catch(wrapFail);
     return true;
   }
 
@@ -501,6 +455,17 @@ const Checkout = () => {
         setCheckoutUrl(orderData.checkoutUrl || null);
         setRawRequest(orderData.rawRequest || null);
         setMerchOrderId(orderData.merchOrderId || null);
+        if (typeof window !== "undefined" && orderData.rawRequest) {
+          const rawRequestParams = new URLSearchParams(orderData.rawRequest);
+          window.sessionStorage.setItem(
+            "telebirr_order_debug",
+            JSON.stringify({
+              rawRequestSource: orderData.rawRequestSource || "unknown",
+              prepayId: orderData.prepayId || rawRequestParams.get("prepay_id"),
+              rawRequestKeys: Array.from(rawRequestParams.keys()),
+            })
+          );
+        }
         if (isMiniChannel) {
           if (!orderData.rawRequest) {
             setError("Unable to start mini app payment. Please try again.");
