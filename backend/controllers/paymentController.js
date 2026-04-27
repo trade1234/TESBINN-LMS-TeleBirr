@@ -190,6 +190,25 @@ const sanitizeTitle = (value) => {
   return raw.replace(/[~`!#$%^*()\-+=|/<>?;:"\[\]{}\\&]/g, " ").replace(/\s+/g, " ").trim();
 };
 
+const redactDiagnosticValue = (value, depth = 0) => {
+  if (depth > 4) return "[MaxDepth]";
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return value.length > 500 ? `${value.slice(0, 500)}...` : value;
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => redactDiagnosticValue(item, depth + 1));
+  if (typeof value !== "object") return String(value);
+
+  const redacted = {};
+  Object.entries(value).forEach(([key, val]) => {
+    if (/token|authorization|sign|password|secret|key/i.test(key)) {
+      redacted[key] = "[REDACTED]";
+      return;
+    }
+    redacted[key] = redactDiagnosticValue(val, depth + 1);
+  });
+  return redacted;
+};
+
 const getProviderRawRequest = (createOrderResult) => {
   const bizContent = createOrderResult?.biz_content || {};
   return (
@@ -270,6 +289,15 @@ exports.authTelebirrToken = asyncHandler(async (req, res, next) => {
       raw: authTokenResult,
     },
   });
+});
+
+exports.telebirrMiniDebug = asyncHandler(async (req, res) => {
+  const diagnostic = redactDiagnosticValue(req.body || {});
+  console.log("[Telebirr] mini-app debug", {
+    userId: req.user?.id || null,
+    diagnostic,
+  });
+  res.status(200).json({ success: true });
 });
 
 exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {

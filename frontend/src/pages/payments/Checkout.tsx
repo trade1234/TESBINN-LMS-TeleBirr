@@ -43,7 +43,13 @@ type MiniAppBridge = {
   native?: (
     method: string,
     options: Record<string, string>
-  ) => Promise<MiniAppPaymentResult & { token?: string }>;
+  ) => Promise<
+    MiniAppPaymentResult & {
+      token?: string;
+      effectiveDate?: string;
+      expirationDate?: string;
+    }
+  >;
   getAuthCode?: (options: {
     scopes: string[];
     success?: (result: { authCode?: string; token?: string }) => void;
@@ -87,6 +93,10 @@ type MiniAppPaymentIdentity = {
 };
 
 const telebirrChannel = (import.meta.env.VITE_TELEBIRR_CHANNEL || "h5").toLowerCase();
+const configuredMiniAppId =
+  import.meta.env.VITE_MINI_APP_ID?.trim() ||
+  import.meta.env.VITE_TELEBIRR_MINI_APP_ID?.trim() ||
+  "";
 const resolveMiniAppSdkUrl = () => {
   const configuredUrl = import.meta.env.VITE_MINI_APP_SDK_URL?.trim();
   if (configuredUrl) {
@@ -103,6 +113,59 @@ const getMiniAppBridge = (): MiniAppBridge | null => {
   if (typeof window === "undefined") return null;
   const runtimeWindow = window as Window & { ma?: MiniAppBridge; my?: MiniAppBridge };
   return runtimeWindow.ma || runtimeWindow.my || null;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const getMiniAppRuntimeInfo = () => {
+  if (typeof window === "undefined") return {};
+  const bridge = getMiniAppBridge();
+  const runtimeWindow = window as Window & {
+    ma?: MiniAppBridge;
+    my?: MiniAppBridge;
+    __ma_environment?: string;
+  };
+  return {
+    hasMa: Boolean(runtimeWindow.ma),
+    hasMy: Boolean(runtimeWindow.my),
+    hasNative: typeof bridge?.native === "function",
+    hasTradePay: typeof bridge?.tradePay === "function",
+    maEnvironment: runtimeWindow.__ma_environment || null,
+    userAgent: window.navigator.userAgent,
+  };
+};
+
+const getRawRequestKeys = (rawRequest: string) => {
+  const params = new URLSearchParams(rawRequest.trim());
+  return Array.from(params.keys());
+};
+
+const normalizeDebugValue = (value: unknown): unknown => {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return String(value);
+  }
+};
+
+const reportMiniAppDebug = (stage: string, details: Record<string, unknown>) => {
+  const payload = {
+    stage,
+    timestamp: new Date().toISOString(),
+    ...details,
+  };
+
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem("telebirr_mini_last_debug", JSON.stringify(payload));
+  }
+
+  void api.post("/payments/telebirr/mini-debug", payload).catch((error: unknown) => {
+    console.warn("[Telebirr] Failed to report mini app debug", error);
+  });
 };
 
 const getRawRequestParam = (rawRequest: string, key: string) => {
@@ -211,33 +274,94 @@ const isMiniAppPaymentFinalFailure = (result: MiniAppPaymentResult = {}) => {
 };
 
 const getMiniAppAccessToken = async (bridge: MiniAppBridge, rawRequest: string) => {
-  const appId = getRawRequestParam(rawRequest, "appid");
+  const rawRequestAppId = getRawRequestParam(rawRequest, "appid");
+  const appId = configuredMiniAppId || rawRequestAppId;
+  const debugBase = {
+    appId,
+    appIdSource: configuredMiniAppId ? "env" : "rawRequest",
+    rawRequestAppId,
+    rawRequestKeys: getRawRequestKeys(rawRequest),
+    runtime: getMiniAppRuntimeInfo(),
+  };
+
   if (!appId) {
+    reportMiniAppDebug("getMiniAppToken:missing-appid", debugBase);
     throw new Error("Missing appid in mini app payment request.");
   }
 
-  let token: string | null = null;
+  reportMiniAppDebug("getMiniAppToken:start", debugBase);
 
-  if (bridge.native) {
+  let token: string | null = null;
+  let lastError: unknown = null;
+
+  if (typeof bridge.native === "function") {
     try {
-      const tokenResponse = await bridge.native("getMiniAppToken", { appId });
-      token = tokenResponse?.token || null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const tokenResponse = await bridge.native("getMiniAppToken", { appId });
+          token = tokenResponse?.token || null;
+          if (token) {
+            reportMiniAppDebug("getMiniAppToken:success", {
+              ...debugBase,
+              attempt,
+              tokenReturned: true,
+              effectiveDate: tokenResponse.effectiveDate || null,
+              expirationDate: tokenResponse.expirationDate || null,
+            });
+            break;
+          }
+          lastError = tokenResponse;
+          reportMiniAppDebug("getMiniAppToken:no-token-response", {
+            ...debugBase,
+            attempt,
+            sdkResponse: normalizeDebugValue(tokenResponse),
+          });
+        } catch (error: unknown) {
+          lastError = error;
+          reportMiniAppDebug("getMiniAppToken:attempt-failed", {
+            ...debugBase,
+            attempt,
+            sdkRejection: normalizeDebugValue(error),
+          });
+        }
+
+        if (attempt < 3) {
+          await sleep(400);
+        }
+      }
     } catch (error) {
-      throw new Error(
-        getPaymentErrorMessage(
-          error,
-          "Unable to get Mini App access token from the SuperApp."
-        )
-      );
+      lastError = error;
     }
   }
 
-  if (!bridge.native) {
+  if (typeof bridge.native !== "function") {
+    reportMiniAppDebug("getMiniAppToken:native-missing", debugBase);
     throw new Error("Mini App native bridge is unavailable. Open this page inside the SuperApp.");
   }
 
   if (!token) {
-    throw new Error("Mini App access token was not returned by the SuperApp.");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        "telebirr_mini_token_debug",
+        JSON.stringify({
+          ...debugBase,
+          error:
+            lastError && typeof lastError === "object"
+              ? lastError
+              : String(lastError || ""),
+        })
+      );
+    }
+    reportMiniAppDebug("getMiniAppToken:failed", {
+      ...debugBase,
+      sdkRejection: normalizeDebugValue(lastError),
+    });
+    throw new Error(
+      getPaymentErrorMessage(
+        lastError,
+        `Unable to get Mini App access token from the SuperApp for appId ${appId}.`
+      )
+    );
   }
 
   if (typeof window !== "undefined") {
@@ -500,6 +624,7 @@ const Checkout = () => {
   }, [courseId, isMiniChannel, navigate]);
 
   const handleProceed = async () => {
+    if (isRedirecting) return;
     setError(null);
 
     if (isMiniChannel) {
@@ -508,9 +633,11 @@ const Checkout = () => {
         return;
       }
 
+      setIsRedirecting(true);
       try {
         await loadMiniAppSdk();
       } catch (sdkError: unknown) {
+        setIsRedirecting(false);
         setError(
           getPaymentErrorMessage(sdkError, "Failed to load the Mini App payment SDK.")
         );
@@ -519,6 +646,7 @@ const Checkout = () => {
 
       const bridge = getMiniAppBridge();
       if (!bridge) {
+        setIsRedirecting(false);
         setError(
           "Mini app payment bridge is not available in this runtime. Ensure js-sdk.min.js is bundled and the page is running inside the Telebirr Mini App runtime."
         );
@@ -530,11 +658,11 @@ const Checkout = () => {
         const accessToken = await getMiniAppAccessToken(bridge, rawRequest);
         authIdentity = await exchangeMiniAppAccessToken(accessToken);
       } catch (tokenError: unknown) {
+        setIsRedirecting(false);
         setError(getPaymentErrorMessage(tokenError, "Failed to obtain Mini App access token."));
         return;
       }
 
-      setIsRedirecting(true);
       const started = startMiniAppPayment(bridge, rawRequest, authIdentity, {
         onSuccess: (result) => {
           if (isMiniAppPaymentSuccess(result, "success")) {
