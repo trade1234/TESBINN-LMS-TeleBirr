@@ -450,6 +450,17 @@ const startMiniAppPayment = (
   if (identity?.identityType) identityPayload.identityType = identity.identityType;
   if (identity?.walletIdentityId) identityPayload.walletIdentityId = identity.walletIdentityId;
   if (identity?.identifier) identityPayload.identifier = identity.identifier;
+  const paymentDebugBase = {
+    runtime: getMiniAppRuntimeInfo(),
+    rawRequestAppId: getRawRequestParam(normalizedRequest, "appid"),
+    rawRequestKeys: getRawRequestKeys(normalizedRequest),
+    orderStrKeys: getRawRequestKeys(orderStr),
+    tradeNO,
+    hasSign: Boolean(sign),
+    hasEncodedSign: Boolean(encodedSign),
+    identityKeys: Object.keys(identityPayload),
+  };
+  reportMiniAppDebug("tradePay:start", paymentDebugBase);
   let settled = false;
   const settleSuccess = (result: MiniAppPaymentResult) => {
     if (settled) return;
@@ -466,6 +477,7 @@ const startMiniAppPayment = (
     callbacks.onFail(error);
   };
   const timeoutId = window.setTimeout(() => {
+    reportMiniAppDebug("tradePay:timeout", paymentDebugBase);
     settleFail({
       message:
         "Mini app payment bridge did not respond. This usually means the runtime does not support the requested payment API or the SDK method name is mismatched.",
@@ -474,18 +486,50 @@ const startMiniAppPayment = (
 
   const wrapSuccess = (result: MiniAppPaymentResult) => {
     window.clearTimeout(timeoutId);
+    reportMiniAppDebug("tradePay:success", {
+      ...paymentDebugBase,
+      sdkResponse: normalizeDebugValue(result),
+    });
     settleSuccess(result);
   };
   const wrapFail = (error: MiniAppPaymentResult) => {
     window.clearTimeout(timeoutId);
     if (isMiniAppPaymentSuccess(error, "fail")) {
+      reportMiniAppDebug("tradePay:fail-callback-success", {
+        ...paymentDebugBase,
+        sdkResponse: normalizeDebugValue(error),
+      });
       settleSuccess(error);
       return;
     }
+    reportMiniAppDebug("tradePay:failed", {
+      ...paymentDebugBase,
+      sdkRejection: normalizeDebugValue(error),
+      status: getMiniAppPaymentStatus(error),
+    });
     settleFail(error);
   };
 
+  if (bridge.native) {
+    reportMiniAppDebug("startPay:using-native", paymentDebugBase);
+    void bridge
+      .native("startPay", {
+        rawRequest: normalizedRequest,
+        bussinessType: "BuyGoods",
+      })
+      .then((result) => {
+        if (result && isMiniAppPaymentFinalFailure(result)) {
+          wrapFail(result);
+          return;
+        }
+        wrapSuccess(result || {});
+      })
+      .catch(wrapFail);
+    return true;
+  }
+
   if (bridge.tradePay) {
+    reportMiniAppDebug("tradePay:using-sdk-wrapper", paymentDebugBase);
     const result = bridge.tradePay({
       tradeNO,
       orderStr,
@@ -505,6 +549,7 @@ const startMiniAppPayment = (
   }
 
   if (bridge.native && tradeNO && orderStr && encodedSign) {
+    reportMiniAppDebug("tradePay:using-native-fallback", paymentDebugBase);
     void bridge
       .native("tradePay", {
         tradeNO,
@@ -525,6 +570,7 @@ const startMiniAppPayment = (
   }
 
   if (bridge.startPay) {
+    reportMiniAppDebug("tradePay:using-startPay-fallback", paymentDebugBase);
     bridge.startPay({
       rawRequest: normalizedRequest,
       success: wrapSuccess,
@@ -533,6 +579,7 @@ const startMiniAppPayment = (
     return true;
   }
 
+  reportMiniAppDebug("tradePay:no-payment-method", paymentDebugBase);
   return false;
 };
 
@@ -653,17 +700,7 @@ const Checkout = () => {
         return;
       }
 
-      let authIdentity: MiniAppPaymentIdentity | null = null;
-      try {
-        const accessToken = await getMiniAppAccessToken(bridge, rawRequest);
-        authIdentity = await exchangeMiniAppAccessToken(accessToken);
-      } catch (tokenError: unknown) {
-        setIsRedirecting(false);
-        setError(getPaymentErrorMessage(tokenError, "Failed to obtain Mini App access token."));
-        return;
-      }
-
-      const started = startMiniAppPayment(bridge, rawRequest, authIdentity, {
+      const started = startMiniAppPayment(bridge, rawRequest, null, {
         onSuccess: (result) => {
           if (isMiniAppPaymentSuccess(result, "success")) {
             navigate(

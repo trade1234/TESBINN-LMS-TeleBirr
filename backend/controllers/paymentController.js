@@ -435,7 +435,11 @@ exports.createTelebirrOrder = asyncHandler(async (req, res, next) => {
   }
 
   const providerRawRequest = getProviderRawRequest(createOrderResult);
-  const rawRequest = providerRawRequest || orderService.createRawRequest(prepayId, telebirrConfig);
+  const rawRequest =
+    providerRawRequest ||
+    orderService.createRawRequest(prepayId, telebirrConfig, {
+      encode: !isMiniMode,
+    });
   const checkoutUrl = orderService.createCheckoutUrl(prepayId, telebirrConfig);
   const rawRequestParams = new URLSearchParams(rawRequest);
   console.log(`[Telebirr] Checkout URL: ${checkoutUrl}`);

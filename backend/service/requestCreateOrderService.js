@@ -123,7 +123,7 @@ function createRequestObject(config, title, amount, merchOrderId, redirectUrl, p
   return req;
 }
 
-function createRawRequest(prepayId, configOverride) {
+function createRawRequest(prepayId, configOverride, options = {}) {
   const config = configOverride || configModule;
   const map = {
     appid: config.merchantAppId,
@@ -133,16 +133,21 @@ function createRawRequest(prepayId, configOverride) {
     timestamp: tools.createTimeStamp(),
   };
   const sign = tools.signRequestObject(map, config.privateKey);
-  const params = new URLSearchParams({
-    appid: map.appid,
-    merch_code: map.merch_code,
-    nonce_str: map.nonce_str,
-    prepay_id: map.prepay_id,
-    timestamp: map.timestamp,
-    sign,
-    sign_type: "SHA256WithRSA",
-  });
-  return params.toString();
+  const pairs = [
+    ["appid", map.appid],
+    ["merch_code", map.merch_code],
+    ["nonce_str", map.nonce_str],
+    ["prepay_id", map.prepay_id],
+    ["timestamp", map.timestamp],
+    ["sign", sign],
+    ["sign_type", "SHA256WithRSA"],
+  ];
+
+  if (options.encode === false) {
+    return pairs.map(([key, value]) => `${key}=${value}`).join("&");
+  }
+
+  return new URLSearchParams(pairs).toString();
 }
 
 function createCheckoutUrl(prepayId, configOverride) {
