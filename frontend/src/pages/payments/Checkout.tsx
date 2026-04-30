@@ -437,6 +437,7 @@ const startMiniAppPayment = (
   callbacks: {
     onSuccess: (result: MiniAppPaymentResult) => void;
     onFail: (error: MiniAppPaymentResult) => void;
+    onPending: (result: MiniAppPaymentResult) => void;
   }
 ) => {
   const normalizedRequest = request.trim();
@@ -476,13 +477,22 @@ const startMiniAppPayment = (
     }
     callbacks.onFail(error);
   };
+  const settlePending = (result: MiniAppPaymentResult) => {
+    if (settled) return;
+    settled = true;
+    callbacks.onPending(result);
+  };
   const timeoutId = window.setTimeout(() => {
-    reportMiniAppDebug("tradePay:timeout", paymentDebugBase);
-    settleFail({
+    const timeoutResult = {
       message:
-        "Mini app payment bridge did not respond. This usually means the runtime does not support the requested payment API or the SDK method name is mismatched.",
+        "Mini app payment bridge did not return a final result. Checking payment status.",
+    };
+    reportMiniAppDebug("tradePay:pending-timeout", {
+      ...paymentDebugBase,
+      sdkResponse: timeoutResult,
     });
-  }, 10000);
+    settlePending(timeoutResult);
+  }, 90000);
 
   const wrapSuccess = (result: MiniAppPaymentResult) => {
     window.clearTimeout(timeoutId);
@@ -728,6 +738,11 @@ const Checkout = () => {
                 "Mini app payment failed.";
           setIsRedirecting(false);
           setError(message);
+        },
+        onPending: () => {
+          navigate(
+            `/payment/return?courseId=${encodeURIComponent(courseId || "")}${merchOrderId ? `&merch_order_id=${encodeURIComponent(merchOrderId)}` : ""}`
+          );
         },
       });
 
