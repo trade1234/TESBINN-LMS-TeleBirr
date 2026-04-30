@@ -103,7 +103,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "International Trade Training",
     icon: Ship,
     heroImage:
-      "https://images.unsplash.com/photo-1494412685616-a5d310fbb07d?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-1abefb6fa0a548ccbef5886e0f87",
     headline: "Stop Struggling Locally. Start Trading Globally.",
     subheadline:
       "Learn how to import from China and export Ethiopian products step by step, even if you are starting from zero.",
@@ -168,7 +168,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "Coffee Career Training",
     icon: Coffee,
     heroImage:
-      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-3a10018c738a4ff28d97ee164504",
     headline: "Turn Your Passion for Coffee Into a High-Income Skill.",
     subheadline:
       "Learn professional barista skills, master espresso and latte art, and start your career or coffee business with confidence.",
@@ -237,7 +237,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "Premium Coffee Skill",
     icon: Award,
     heroImage:
-      "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-9389d124139b4945b156e63ecd27",
     headline: "Master Coffee Tasting. Become a Coffee Quality Expert.",
     subheadline:
       "Learn professional coffee cupping, sensory analysis, and quality grading for high-value opportunities in the coffee industry.",
@@ -305,7 +305,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "High-Income Digital Skill",
     icon: Megaphone,
     heroImage:
-      "https://images.unsplash.com/photo-1557838923-2985c318be48?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-83c9db35a3b647ddadd3e365b645",
     headline: "Make Money Online Using Just Your Phone.",
     subheadline:
       "Learn how to sell products, run ads, and generate income using Facebook, TikTok, WhatsApp, Telegram, and digital tools.",
@@ -439,7 +439,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "Capital Market Training",
     icon: TrendingUp,
     heroImage:
-      "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-b5ae64ea22cf4b3784dd8664a5ce",
     headline: "Learn Capital Markets and Build Smarter Investment Decisions.",
     subheadline:
       "Understand stocks, bonds, risk, and market opportunities with practical training designed for beginners and business professionals.",
@@ -505,7 +505,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "Sales & Marketing Training",
     icon: BriefcaseBusiness,
     heroImage:
-      "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-4b654465423543b78770c8470f43",
     headline: "Learn How to Sell Better and Grow Business Revenue.",
     subheadline:
       "Master customer communication, lead follow-up, offer positioning, and practical sales systems that convert attention into paying customers.",
@@ -571,7 +571,7 @@ const trainings: Record<string, TrainingLandingConfig> = {
     eyebrow: "Customer Service Training",
     icon: Users,
     heroImage:
-      "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1400&q=80",
+      "https://tesbinn.s3.us-east-1.amazonaws.com/lesson-4ef676e061774d928b1e6a97fc08",
     headline: "Become the Professional Customers Trust and Remember.",
     subheadline:
       "Learn professional communication, complaint handling, service recovery, and customer experience skills for work and business.",
@@ -987,58 +987,28 @@ const BulletList = ({ items }: { items: string[] }) => (
   </div>
 );
 
-const ImportExportPromo = ({ training }: { training: TrainingLandingConfig }) => {
+const PosterPromo = ({ training }: { training: TrainingLandingConfig }) => {
   const registerUrl = `/register?course=${encodeURIComponent(training.label)}`;
-  const skillCards = [
-    {
-      icon: PackageSearch,
-      title: "Supplier Sourcing",
-      text: "Find trusted suppliers and quality products at the best price.",
-    },
-    {
-      icon: ShoppingCart,
-      title: "High-Profit Product Selection",
-      text: "Choose fast-moving products and maximize your margins.",
-    },
-    {
-      icon: Handshake,
-      title: "Price Negotiation",
-      text: "Negotiate better prices and build win-win relationships.",
-    },
-    {
-      icon: Ship,
-      title: "Shipping, Customs & Logistics",
-      text: "Understand shipping methods, customs process, and logistics flow.",
-    },
-    {
-      icon: ShieldCheck,
-      title: "Safe Payment Methods",
-      text: "Use secure transaction methods and protect your money.",
-    },
-    {
-      icon: FileCheck2,
-      title: "Export Documentation",
-      text: "Handle export documents and sell products worldwide.",
-    },
-  ];
+  const skillIcons = [PackageSearch, ShoppingCart, Handshake, Ship, ShieldCheck, FileCheck2];
+  const opportunityIcons = [Globe2, TrendingUp, WalletCards];
+  const CourseIcon = training.icon;
+  const skillCards = training.skills.slice(0, 6).map((skill, index) => {
+    const [title, ...rest] = skill.split(":");
+    return {
+      icon: skillIcons[index % skillIcons.length],
+      title: title.trim(),
+      text: rest.join(":").trim() || training.solutionPoints[index % training.solutionPoints.length],
+    };
+  });
 
-  const opportunityCards = [
-    {
-      icon: Globe2,
-      title: "Global Market Access",
-      text: "Tap into global demand and bigger business opportunities.",
-    },
-    {
-      icon: TrendingUp,
-      title: "Higher Profits",
-      text: "Build deals with better margins and repeat buyers.",
-    },
-    {
-      icon: WalletCards,
-      title: "Business Freedom",
-      text: "Create income through import, export, and trade networks.",
-    },
-  ];
+  const opportunityCards = training.opportunities.slice(0, 3).map((opportunity, index) => {
+    const words = opportunity.split(" ");
+    return {
+      icon: opportunityIcons[index % opportunityIcons.length],
+      title: words.slice(0, 3).join(" "),
+      text: opportunity,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-[#f7f4ed] text-[#071f45]">
@@ -1072,22 +1042,19 @@ const ImportExportPromo = ({ training }: { training: TrainingLandingConfig }) =>
 
               <div className="mt-10 max-w-2xl">
                 <p className="text-4xl font-black uppercase leading-[0.96] tracking-tight text-[#071f45] sm:text-5xl lg:text-6xl">
-                  The opportunity is there
+                  {training.headline}
                 </p>
-                <p className="mt-2 text-3xl font-black uppercase leading-[0.98] tracking-tight text-[#071f45] sm:text-4xl lg:text-5xl">
-                  but knowledge gap is
-                </p>
-                <p className="mt-2 text-4xl font-black uppercase leading-[0.96] tracking-tight text-[#b17c00] sm:text-5xl lg:text-6xl">
-                  costing you money every day
+                <p className="mt-4 max-w-xl text-lg font-bold leading-7 text-[#071f45]/80">
+                  {training.truth}
                 </p>
               </div>
 
               <div className="mt-8 inline-flex w-fit items-center overflow-hidden rounded-full border-2 border-[#d49a15] bg-[#071f45] pr-8 shadow-lg">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#071f45] text-[#f4b629]">
-                  <Ship className="h-10 w-10" />
+                  <CourseIcon className="h-10 w-10" />
                 </div>
                 <span className="text-2xl font-black uppercase tracking-wide text-white sm:text-4xl">
-                  Import Export
+                  {training.label.replace(" Training", "")}
                 </span>
               </div>
 
@@ -1114,14 +1081,14 @@ const ImportExportPromo = ({ training }: { training: TrainingLandingConfig }) =>
               <div className="relative min-h-[360px] overflow-hidden rounded-[2rem] border-4 border-[#d49a15] bg-[#071f45] shadow-2xl lg:min-h-[520px]">
                 <img
                   src={training.heroImage}
-                  alt="Import export containers"
+                  alt={training.label}
                   className="absolute inset-0 h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#071f45]/85 via-[#071f45]/10 to-transparent" />
                 <div className="absolute bottom-5 left-5 right-5 rounded-2xl bg-white/95 p-4 text-[#071f45] shadow-xl">
-                  <p className="text-lg font-black uppercase">Stop struggling locally</p>
+                  <p className="text-lg font-black uppercase">{training.urgency}</p>
                   <p className="text-2xl font-black uppercase text-[#b17c00]">
-                    Start trading globally
+                    {training.finalTitle}
                   </p>
                 </div>
               </div>
@@ -1131,9 +1098,13 @@ const ImportExportPromo = ({ training }: { training: TrainingLandingConfig }) =>
                   <Globe2 className="h-7 w-7" />
                 </div>
                 <h2 className="text-center text-3xl font-black uppercase leading-tight">
-                  Stop Struggling Locally
-                  <span className="block text-[#f4b629]">Start Trading Globally</span>
-                  <span className="block">Make Real Money</span>
+                  {training.label}
+                  <span className="block text-[#f4b629]">
+                    {training.eyebrow}
+                  </span>
+                  <span className="block">
+                    Build Real Opportunity
+                  </span>
                 </h2>
                 <div className="mt-5 grid gap-4">
                   {opportunityCards.map((item) => (
@@ -1198,13 +1169,12 @@ const ImportExportPromo = ({ training }: { training: TrainingLandingConfig }) =>
             <p className="text-sm font-black uppercase tracking-[0.2em] text-[#b17c00]">
               Limited seats available
             </p>
-            <h2 className="mt-3 text-3xl font-black uppercase text-[#071f45] md:text-5xl">
-              Learn import export step by step
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-[#071f45]/75">
-              Practical sessions, certification, business guidance, supplier sourcing,
-              product selection, logistics, payments, and export documentation.
-            </p>
+              <h2 className="mt-3 text-3xl font-black uppercase text-[#071f45] md:text-5xl">
+                {training.finalTitle}
+              </h2>
+              <p className="mx-auto mt-4 max-w-2xl text-[#071f45]/75">
+                {training.subheadline}
+              </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button className="bg-red-600 hover:bg-red-700" asChild>
                 <Link to={registerUrl}>Register Now</Link>
@@ -1311,8 +1281,8 @@ const TrainingLanding = () => {
   const Icon = training.icon;
   const registerUrl = `/register?course=${encodeURIComponent(training.label)}`;
 
-  if (training.slug === "import-export-training") {
-    return <ImportExportPromo training={training} />;
+  if (staticTraining) {
+    return <PosterPromo training={training} />;
   }
 
   return (
