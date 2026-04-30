@@ -24,6 +24,7 @@ import Careers from "./pages/company/Careers";
 import Blog from "./pages/company/Blog";
 import BlogPostPage from "./pages/company/BlogPost";
 import Press from "./pages/company/Press";
+import TrainingLanding from "./pages/marketing/TrainingLanding";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import StudentBrowse from "./pages/student/StudentBrowse";
 import StudentCourseDetails from "./pages/student/StudentCourseDetails";
@@ -87,6 +88,15 @@ const App = () => (
           <Route path="/press" element={<Press />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/import-export-training" element={<TrainingLanding />} />
+          <Route path="/barista-training" element={<TrainingLanding />} />
+          <Route path="/coffee-cupping-training" element={<TrainingLanding />} />
+          <Route path="/digital-marketing" element={<TrainingLanding />} />
+          <Route path="/ai-for-business" element={<TrainingLanding />} />
+          <Route path="/capital-market-training" element={<TrainingLanding />} />
+          <Route path="/sales-marketing-training" element={<TrainingLanding />} />
+          <Route path="/customer-service-training" element={<TrainingLanding />} />
+          <Route path="/training/:courseId" element={<TrainingLanding />} />
 
           {/* Student Routes */}
           <Route path="/student" element={<StudentDashboard />} />

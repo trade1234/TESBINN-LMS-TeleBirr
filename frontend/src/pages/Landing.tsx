@@ -29,37 +29,37 @@ const trainings = [
   {
     icon: Ship,
     label: "Import-Export",
-    href: "/courses?search=International%20Trade%20Import%2FExport",
+    href: "/import-export-training",
   },
   {
     icon: TrendingUp,
     label: "Capital Market",
-    href: "/courses?search=Stock%20Market",
+    href: "/capital-market-training",
   },
   {
     icon: Megaphone,
     label: "Digital Marketing",
-    href: "/courses?category=marketing&search=Digital%20Marketing",
+    href: "/digital-marketing",
   },
   {
     icon: ShoppingBag,
     label: "Sales & Marketing",
-    href: "/courses?category=marketing&search=Sales",
+    href: "/sales-marketing-training",
   },
   {
     icon: Coffee,
     label: "Coffee & Barista",
-    href: "/courses?search=coffee%7Cbarista",
+    href: "/barista-training",
   },
   {
     icon: Users,
     label: "Customer Service",
-    href: "/courses?category=business&search=Customer%20Service",
+    href: "/customer-service-training",
   },
   {
     icon: Bot,
     label: "AI for Business",
-    href: "/courses?category=ai&search=AI%20for%20Business",
+    href: "/ai-for-business",
   },
   {
     icon: BookOpen,

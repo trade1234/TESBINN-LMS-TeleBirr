@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import CourseCard from "@/components/courses/CourseCard";
 import CategoryFilter from "@/components/courses/CategoryFilter";
 import { api } from "@/lib/api";
+import { isExcludedFunnelCourse } from "@/lib/courseFunnels";
 import { minutesToDurationLabel } from "@/lib/format";
 import type { ApiResponse, Course, Enrollment } from "@/lib/types";
 import backgroundImage from "@/assets/background.jpg";
@@ -159,7 +160,7 @@ const CourseCatalogSection = ({ embedded = false, studentMode = false }: CourseC
         enrollment?.paymentStatus !== "paid";
       const isApproved = approvalStatus === "approved";
 
-      let ctaHref = `/course/${c._id}`;
+      let ctaHref = isExcludedFunnelCourse(c.title) ? `/course/${c._id}` : `/training/${c._id}`;
       let ctaLabel: string | undefined;
       let ctaDisabled = false;
       let enrolled = false;
